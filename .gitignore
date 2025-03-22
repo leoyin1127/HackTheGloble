@@ -1,0 +1,65 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# TypeScript
+dist/
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*~
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build and deployment
+build/
+coverage/
+
+# React Native / Expo
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+ios/Pods/
+android/.gradle
+android/app/build
+android/build
+ios/build
+
+# Generated files
+.watchmanconfig
+.DS_Store
+
+# Uploads directory (except the placeholder)
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Supabase
+.supabase/
+
+# Temporary files
+.history
+.temp/
+tmp/
+temp/ 
