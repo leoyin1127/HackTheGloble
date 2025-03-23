@@ -119,8 +119,12 @@ class ProductService {
                 query = query.limit(20); // Default limit
             }
 
-            if (filters.offset) {
-                query = query.range(filters.offset, filters.offset + (filters.limit || 20) - 1);
+            if (filters.offset !== undefined) {
+                // Use the range method to implement proper offset-based pagination
+                const startIndex = filters.offset;
+                const endIndex = filters.offset + (filters.limit || 20) - 1;
+                console.log(`ProductService: Applying pagination range from ${startIndex} to ${endIndex}`);
+                query = query.range(startIndex, endIndex);
             }
 
             const { data, error } = await query;

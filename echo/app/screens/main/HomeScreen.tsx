@@ -130,6 +130,31 @@ const getFallbackData = () => {
     ];
 };
 
+// Function to check if a product is an undergarment that should be excluded
+const isUndergarment = (product: Product): boolean => {
+    // List of terms that might indicate undergarments
+    const undergarmentTerms = [
+        'underwear', 'undergarment', 'bra', 'panty', 'panties', 'boxer', 'brief', 'lingerie',
+        'thong', 'g-string', 'bralette', 'underpants', 'slip', 'intimates'
+    ];
+
+    // Check various fields for undergarment indicators
+    const titleMatch = product.title ? undergarmentTerms.some(term =>
+        product.title.toLowerCase().includes(term)) : false;
+
+    const categoryMatch = product.sub_category ? undergarmentTerms.some(term =>
+        product.sub_category!.toLowerCase().includes(term)) : false;
+
+    const articleMatch = product.article_type ? undergarmentTerms.some(term =>
+        product.article_type!.toLowerCase().includes(term)) : false;
+
+    const descriptionMatch = product.description ? undergarmentTerms.some(term =>
+        product.description.toLowerCase().includes(term)) : false;
+
+    // If any field matches undergarment terms, filter it out
+    return titleMatch || categoryMatch || articleMatch || descriptionMatch;
+};
+
 const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
     const { colors, spacing, typography, borderRadius, shadows, animation } = useTheme();
     const { featuredProducts, getFeaturedProducts, loading: productsLoading, error } = useProducts();
@@ -205,11 +230,15 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
 
                 if (data && data.length > 0) {
                     console.log("HomeScreen: Setting products from API data");
+                    // Filter out undergarments
+                    const filteredData = data.filter(product => !isUndergarment(product));
+                    console.log(`HomeScreen: Filtered out ${data.length - filteredData.length} undergarment items`);
+
                     // Track the IDs of initially loaded products
-                    const initialIds = new Set(data.map(p => p.id));
+                    const initialIds = new Set(filteredData.map(p => p.id));
                     setLoadedItemIds(initialIds);
-                    setProducts(data);
-                    setFilteredItems(data);
+                    setProducts(filteredData);
+                    setFilteredItems(filteredData);
                 } else {
                     console.log("HomeScreen: No products from API, trying featuredProducts");
                     // Only use featured products as fallback if direct query fails
@@ -220,11 +249,13 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                 // Use fallback data if database fails
                 console.log("HomeScreen: Using fallback data");
                 const fallbackData = getFallbackProducts();
+                // Filter out undergarments from fallback data too
+                const filteredFallbackData = fallbackData.filter(product => !isUndergarment(product));
                 // Track fallback product IDs
-                const initialIds = new Set(fallbackData.map(p => p.id));
+                const initialIds = new Set(filteredFallbackData.map(p => p.id));
                 setLoadedItemIds(initialIds);
-                setProducts(fallbackData);
-                setFilteredItems(fallbackData);
+                setProducts(filteredFallbackData);
+                setFilteredItems(filteredFallbackData);
             } finally {
                 setIsLoading(false);
             }
@@ -237,8 +268,12 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
     // Use featured products only when they're available and we don't already have products
     useEffect(() => {
         if (featuredProducts && featuredProducts.length > 0 && (!products.length || products.length === 0)) {
-            setProducts(featuredProducts);
-            setFilteredItems(featuredProducts);
+            // Filter out undergarments from featured products
+            const filteredFeaturedProducts = featuredProducts.filter(product => !isUndergarment(product));
+            console.log(`HomeScreen: Filtered out ${featuredProducts.length - filteredFeaturedProducts.length} undergarment items from featured products`);
+
+            setProducts(filteredFeaturedProducts);
+            setFilteredItems(filteredFeaturedProducts);
         }
     }, [featuredProducts, products.length]);
 
@@ -336,7 +371,6 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
         });
     };
 
-    // Move this up before loadMoreProducts
     // Modify the loadMoreProducts function
     const fetchMoreProducts = async ({
         offset = 0,
@@ -366,15 +400,19 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
 
             if (data && data.length > 0) {
                 console.log(`API returned ${data.length} products`);
-                return data;
+                // Filter out undergarments
+                const filteredData = data.filter(product => !isUndergarment(product));
+                console.log(`Filtered out ${data.length - filteredData.length} undergarment items`);
+                return filteredData;
             } else {
                 console.log('API returned no data');
                 return [];
             }
         } catch (error) {
             console.error('Error in fetchMoreProducts:', error);
-            // Return fallback data in case of error
-            return getFallbackData().slice(offset, offset + limit);
+            // Return fallback data in case of error, filtering out undergarments
+            const fallbackData = getFallbackData().slice(offset, offset + limit);
+            return fallbackData.filter(product => !isUndergarment(product));
         }
     };
 
@@ -439,7 +477,7 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
         } finally {
             setIsLoading(false);
         }
-    }, [hasMoreProducts, isLoading, filteredItems.length, loadedItemIds, searchQuery]);
+    }, [filteredItems.length, hasMoreProducts, isLoading, loadedItemIds, searchQuery]);
 
     // Modify swipeLeft and swipeRight to fetch more data when needed
     const swipeLeft = () => {

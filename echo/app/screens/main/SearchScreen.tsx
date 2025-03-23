@@ -634,34 +634,53 @@ const SearchScreen = () => {
         </View>
     );
 
-    // Update the fetchFilteredProducts function with better edge case handling
+    // Add a function to check if a product is an undergarment that should be excluded
+    const isUndergarment = (product: Product): boolean => {
+        // List of terms that might indicate undergarments
+        const undergarmentTerms = [
+            'underwear', 'undergarment', 'bra', 'panty', 'panties', 'boxer', 'brief', 'lingerie',
+            'thong', 'g-string', 'bralette', 'underpants', 'slip', 'intimates'
+        ];
+
+        // Check various fields for undergarment indicators
+        const titleMatch = product.title ? undergarmentTerms.some(term =>
+            product.title.toLowerCase().includes(term)) : false;
+
+        const categoryMatch = product.sub_category ? undergarmentTerms.some(term =>
+            product.sub_category!.toLowerCase().includes(term)) : false;
+
+        const articleMatch = product.article_type ? undergarmentTerms.some(term =>
+            product.article_type!.toLowerCase().includes(term)) : false;
+
+        // If any field matches undergarment terms, filter it out
+        return titleMatch || categoryMatch || articleMatch;
+    };
+
+    // Modify the fetchFilteredProducts function to better handle pagination
     const fetchFilteredProducts = async (loadMore = false) => {
         try {
-            console.log('Starting fetchFilteredProducts. LoadMore:', loadMore, 'Query:', searchQuery,
-                'Current results:', results.length, 'Total unique IDs loaded:', loadedItemIds.size);
+            console.log(`SearchScreen: fetchFilteredProducts called with loadMore=${loadMore}, query="${searchQuery}", page=${page}, results.length=${results.length}`);
 
             if (loadMore) {
                 setIsLoadingMore(true);
             } else {
                 setIsSearching(true);
-                // Reset to page 1 and clear loaded items when starting a new search
+                // Reset page and loaded items for new searches
                 setPage(1);
                 setLoadedItemIds(new Set());
             }
 
-            // Check if we're loading the same filter conditions repeatedly
-            if (loadMore && results.length > 100) {
-                console.log('Reached reasonable limit of items to load');
-                setHasMoreData(false);
-                setIsLoadingMore(false);
-                setIsSearching(false);
-                return;
-            }
+            // Calculate proper offset for pagination
+            const offset = loadMore ? results.length : 0;
+            const limit = 15; // Keep consistent limit
 
+            console.log(`SearchScreen: Using offset=${offset}, limit=${limit}, current results.length=${results.length}`);
+
+            // Prepare filters for API call
             const filters: ProductFilters = {
                 searchQuery: searchQuery,
-                limit: loadMore ? 30 : 15, // Request more when loading more to account for duplicates
-                offset: loadMore ? results.length : 0, // Use actual results length as offset
+                limit: limit,
+                offset: offset
             };
 
             // Add category filters
@@ -670,104 +689,120 @@ const SearchScreen = () => {
                 .map(category => category.label);
 
             if (selectedCategories.length > 0) {
-                filters.category = selectedCategories[0]; // Use the first selected category
+                filters.category = selectedCategories[0];
+                console.log(`SearchScreen: Adding category filter: ${selectedCategories[0]}`);
             }
 
             // Add sort options
             const selectedFilter = filterOptions.find(option => option.isSelected);
             if (selectedFilter) {
+                let sortOption: "newest" | "price_asc" | "price_desc" | "sustainability" | undefined;
                 switch (selectedFilter.id) {
                     case 'lowPrice':
-                        filters.sortBy = 'price_asc';
+                        sortOption = 'price_asc';
                         break;
                     case 'highPrice':
-                        filters.sortBy = 'price_desc';
+                        sortOption = 'price_desc';
                         break;
                     case 'newest':
-                        filters.sortBy = 'newest';
+                        sortOption = 'newest';
                         break;
                     case 'highSustainability':
-                        filters.sortBy = 'sustainability';
+                        sortOption = 'sustainability';
                         break;
-                    // Featured is the default
+                    default:
+                        sortOption = undefined; // Default
+                }
+                if (sortOption) {
+                    filters.sortBy = sortOption;
+                    console.log(`SearchScreen: Adding sort option: ${sortOption}`);
                 }
             }
 
-            console.log('Search filters:', JSON.stringify(filters));
+            console.log(`SearchScreen: Full filters for API call:`, JSON.stringify(filters));
 
-            // Call the API to get new products
+            // Make API call with error handling
             let fetchedProducts: Product[] = [];
             try {
-                console.log(`Calling ProductService.getProducts with offset: ${filters.offset}, limit: ${filters.limit}`);
-
-                // Call the API method directly from ProductService
                 const data = await ProductService.getProducts(filters);
 
+                console.log(`SearchScreen: API returned ${data?.length || 0} items`);
+
                 if (data && data.length > 0) {
-                    console.log('API returned data:', data.length);
+                    // First filter out any undergarments from the results
+                    const filteredData = data.filter(product => !isUndergarment(product));
+                    console.log(`SearchScreen: Filtered out ${data.length - filteredData.length} undergarment items`);
 
-                    // Filter out already loaded items
-                    fetchedProducts = data.filter(item => !loadedItemIds.has(item.id));
-                    console.log('After filtering duplicates:', fetchedProducts.length);
+                    // Create a set of existing IDs to filter out duplicates
+                    const existingIds = loadMore ? new Set(results.map(item => item.id)) : new Set();
+                    console.log(`SearchScreen: Current existingIds count=${existingIds.size}`);
 
-                    // Update the set of loaded item IDs
-                    const newLoadedItemIds = new Set(loadedItemIds);
-                    fetchedProducts.forEach(item => newLoadedItemIds.add(item.id));
-                    setLoadedItemIds(newLoadedItemIds);
+                    // Log first few IDs from the fetched data for debugging
+                    console.log(`SearchScreen: Sample IDs from fetched data: ${filteredData.slice(0, 3).map(item => item.id).join(', ')}`);
 
-                    console.log('Total unique items now:', newLoadedItemIds.size);
+                    // Filter out any duplicates
+                    const newItems = filteredData.filter(item => !existingIds.has(item.id));
+                    console.log(`SearchScreen: After filtering existing IDs, found ${newItems.length} new items`);
+
+                    fetchedProducts = newItems;
+
+                    // Update loadedItemIds with new items
+                    const newIds = new Set(loadedItemIds);
+                    newItems.forEach(item => newIds.add(item.id));
+                    setLoadedItemIds(newIds);
+
+                    console.log(`SearchScreen: Updated loadedItemIds, new size=${newIds.size}`);
                 } else {
-                    console.log('API returned no data or empty array');
+                    console.log(`SearchScreen: API returned no items or null data`);
                 }
-            } catch (apiError) {
-                console.error('API error:', apiError);
-                // Use fallback data if needed and if we haven't loaded them already
-                const fallbackData = getFallbackData();
-                // Filter out already loaded fallback items
-                fetchedProducts = fallbackData.filter(item => !loadedItemIds.has(item.id));
-
-                if (fetchedProducts.length > 0) {
-                    console.log('Using fallback data, found', fetchedProducts.length, 'new items');
-                    // Update loaded IDs with fallback data
-                    const newLoadedItemIds = new Set(loadedItemIds);
-                    fetchedProducts.forEach(item => newLoadedItemIds.add(item.id));
-                    setLoadedItemIds(newLoadedItemIds);
-                } else {
-                    console.log('No new fallback items available');
+            } catch (error) {
+                console.error(`SearchScreen: API error:`, error);
+                // Use fallback data only if this is an initial load, not for pagination
+                if (!loadMore) {
+                    const fallbackData = getFallbackData();
+                    // Filter out undergarments from fallback data too
+                    fetchedProducts = fallbackData.filter(product => !isUndergarment(product));
+                    console.log(`SearchScreen: Using ${fetchedProducts.length} fallback items for initial load after filtering undergarments`);
                 }
             }
 
-            // If there are no new products or the response is empty, set hasMoreData to false
+            // Handle the case when no new products are found
             if (fetchedProducts.length === 0) {
-                console.log('No unique results found, setting hasMoreData to false');
+                console.log(`SearchScreen: No new products found, setting hasMoreData=false`);
                 setHasMoreData(false);
                 setIsLoadingMore(false);
                 setIsSearching(false);
-                return;
+                // Don't return early if this is an initial load with no results,
+                // we still need to set the empty results
+                if (loadMore) return;
             }
 
-            // Increment page number if loading more
+            // Update page counter
             if (loadMore) {
                 setPage(prevPage => prevPage + 1);
             }
 
-            // Update the results directly rather than waiting for the useEffect
+            // Update the results with either a fresh set or appended items
             if (loadMore) {
-                setResults(prevResults => [...prevResults, ...fetchedProducts]);
-                console.log(`Updated results: ${results.length} + ${fetchedProducts.length} new items`);
+                if (fetchedProducts.length > 0) {
+                    setResults(prevResults => {
+                        const combinedResults = [...prevResults, ...fetchedProducts];
+                        console.log(`SearchScreen: Updated results by appending ${fetchedProducts.length} items, new total=${combinedResults.length}`);
+                        return combinedResults;
+                    });
+                }
             } else {
                 setResults(fetchedProducts);
-                console.log(`Set new results with ${fetchedProducts.length} items`);
+                console.log(`SearchScreen: Set fresh results with ${fetchedProducts.length} items`);
             }
 
-            // Set hasMoreData based on whether we got as many items as requested
-            const requestedLimit = filters.limit || 15;
-            const gotFullPage = fetchedProducts.length >= requestedLimit / 2; // Consider half-full pages as potentially having more
-            setHasMoreData(gotFullPage);
-            console.log(`Setting hasMoreData to ${gotFullPage} based on received ${fetchedProducts.length} vs limit ${requestedLimit}`);
+            // Determine if there might be more data to load
+            // Only mark as having more data if we got a reasonable number of results
+            setHasMoreData(fetchedProducts.length >= limit * 0.5);
+            console.log(`SearchScreen: Set hasMoreData=${fetchedProducts.length >= limit * 0.5}`);
 
         } catch (error) {
-            console.error('Error fetching search results:', error);
+            console.error(`SearchScreen: Unexpected error in fetchFilteredProducts:`, error);
             setHasMoreData(false);
         } finally {
             setIsLoadingMore(false);
@@ -828,53 +863,74 @@ const SearchScreen = () => {
 
     // Override the useEffect that watches products to properly handle pagination
     useEffect(() => {
-        // Only update the entire results list when not loading more
-        if (!isLoadingMore) {
+        // Only update the entire results list when not loading more and this is a fresh search
+        // Never update results from context during pagination
+        if (!isLoadingMore && page === 1) {
             setResults(products);
         }
-    }, [products, isLoadingMore]);
+    }, [products, isLoadingMore, page]);
 
     // Modify the handleLoadMore function to better manage pagination
     const handleLoadMore = () => {
-        if (hasMoreData && !isLoadingMore) {
-            console.log(`Loading more items from page ${page + 1}, current count: ${results.length}`);
-            fetchFilteredProducts(true);
+        console.log(`SearchScreen: handleLoadMore called, hasMoreData=${hasMoreData}, isLoadingMore=${isLoadingMore}`);
+
+        if (!hasMoreData) {
+            console.log(`SearchScreen: Ignoring load more request - no more data available`);
+            return;
         }
+
+        if (isLoadingMore) {
+            console.log(`SearchScreen: Ignoring load more request - already loading`);
+            return;
+        }
+
+        console.log(`SearchScreen: Loading more items from page ${page + 1}, current count: ${results.length}`);
+        fetchFilteredProducts(true);
     };
 
-    // Update the renderLoadMoreButton to provide better user feedback
+    // Update the renderLoadMoreButton to be more visible and provide better feedback
     const renderLoadMoreButton = () => {
-        if (!hasMoreData) return null;
+        console.log(`SearchScreen: renderLoadMoreButton, hasMoreData=${hasMoreData}, isLoadingMore=${isLoadingMore}, results.length=${results.length}`);
+
+        if (results.length === 0) {
+            return null; // Don't show button when no results exist
+        }
+
+        if (!hasMoreData) {
+            return (
+                <View style={[styles.loadMoreContainer, { marginVertical: spacing.lg, alignItems: 'center' }]}>
+                    <Text style={{ color: colors.neutral.darkGray, fontStyle: 'italic' }}>
+                        No more results available
+                    </Text>
+                </View>
+            );
+        }
 
         return (
-            <View style={[styles.loadMoreContainer, { marginVertical: spacing.lg, alignItems: 'center' }]}>
+            <TouchableOpacity
+                onPress={handleLoadMore}
+                disabled={isLoadingMore}
+                style={[styles.loadMoreContainer, {
+                    marginVertical: spacing.lg,
+                    paddingVertical: spacing.md,
+                    alignItems: 'center',
+                    backgroundColor: colors.neutral.lightGray,
+                    borderRadius: borderRadius.md,
+                }]}
+            >
                 {isLoadingMore ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <ActivityIndicator size="small" color={colors.primary.main} />
-                        <Text style={{ marginLeft: spacing.sm, color: colors.neutral.darkGray }}>
-                            Loading more...
+                        <Text style={{ marginLeft: spacing.sm, color: colors.neutral.darkGray, fontWeight: '500' }}>
+                            Loading more results...
                         </Text>
                     </View>
                 ) : (
-                    <TouchableOpacity
-                        style={[
-                            styles.loadMoreButton,
-                            {
-                                backgroundColor: colors.primary.main,
-                                borderRadius: borderRadius.lg,
-                                paddingVertical: spacing.sm,
-                                paddingHorizontal: spacing.lg,
-                                ...shadows.sm
-                            }
-                        ]}
-                        onPress={handleLoadMore}
-                    >
-                        <Text style={{ color: colors.neutral.white, fontWeight: '600' }}>
-                            Load More Results
-                        </Text>
-                    </TouchableOpacity>
+                    <Text style={{ color: colors.primary.main, fontWeight: '600' }}>
+                        Load More Results ({results.length} loaded so far)
+                    </Text>
                 )}
-            </View>
+            </TouchableOpacity>
         );
     };
 
@@ -1148,7 +1204,11 @@ const SearchScreen = () => {
                     <FlatList
                         data={results}
                         renderItem={listLayout === 'grid' ? renderGridItem : renderListItem}
-                        keyExtractor={(item, index) => `${item.id}-${index}`}
+                        keyExtractor={(item, index) => {
+                            // Create a guaranteed unique key using both the item ID and index
+                            // This prevents issues when the same item might appear multiple times
+                            return `item-${item.id}-${index}`;
+                        }}
                         numColumns={listLayout === 'grid' ? 2 : 1}
                         key={listLayout} // This forces FlatList to re-render when layout changes
                         contentContainerStyle={[
@@ -1161,9 +1221,18 @@ const SearchScreen = () => {
                         showsVerticalScrollIndicator={false}
                         columnWrapperStyle={listLayout === 'grid' ? { justifyContent: 'space-between' } : undefined}
                         ListFooterComponent={renderLoadMoreButton}
+                        onEndReached={() => {
+                            // This will trigger loading more items when the user scrolls near the end
+                            if (hasMoreData && !isLoadingMore) {
+                                console.log('SearchScreen: onEndReached triggered, calling handleLoadMore');
+                                handleLoadMore();
+                            }
+                        }}
+                        onEndReachedThreshold={0.2} // Trigger when within 20% of the end
                     />
                 ) : (
-                    renderEmptyState()
+                    // Only show empty state when not loading more items
+                    !isLoadingMore && renderEmptyState()
                 )
             )}
         </SafeAreaView>
