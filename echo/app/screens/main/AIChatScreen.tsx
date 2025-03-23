@@ -52,6 +52,8 @@ const aiResponses = [
 ];
 
 const AIChatScreen = () => {
+    // Use refs to track mounting state
+    const isMounted = useRef(true);
     const navigation = useNavigation<AIChatScreenNavigationProp>();
     const { colors, spacing, typography, borderRadius, shadows } = useTheme();
     const [inputText, setInputText] = useState('');
@@ -69,6 +71,9 @@ const AIChatScreen = () => {
     const [savedItems, setSavedItems] = useState<Product[]>([]);
     const [isLoadingSavedItems, setIsLoadingSavedItems] = useState(false);
 
+    // Track if this is the first mount to avoid unnecessary state updates
+    const isInitialMount = useRef(true);
+
     // Get savedItemIds from ProductContext
     const { savedItemIds } = useProducts();
 
@@ -82,24 +87,32 @@ const AIChatScreen = () => {
     // State to control bottom padding
     const [bottomPadding, setBottomPadding] = useState(0);
 
-    // More aggressive approach to hide bottom tab navigation
+    // Clean up on unmount
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
+
+    // Set up tab bar hiding and status bar
     const isFocused = useIsFocused();
     useEffect(() => {
         if (isFocused) {
             // Ensure proper padding when the tab bar is hidden
             setBottomPadding(Platform.OS === 'ios' ? 30 : 16);
 
-            // Use multiple approaches to ensure the tab bar is hidden
-            // Method 1: Set display none via tabBarStyle
-            navigation.getParent()?.setOptions({
-                tabBarStyle: { display: 'none' },
-                tabBarVisible: false,
-            });
+            // Set tab bar to hidden and control navigation appearance
+            const parent = navigation.getParent();
+            if (parent) {
+                parent.setOptions({
+                    tabBarStyle: { display: 'none' },
+                    tabBarVisible: false,
+                });
 
-            // Method 2: Update via navigation state params (for some React Navigation versions)
-            navigation.getParent()?.setParams({
-                hideTabBar: true
-            });
+                parent.setParams({
+                    hideTabBar: true
+                });
+            }
 
             // Set status bar to light mode for better visibility
             if (Platform.OS === 'android') {
@@ -109,19 +122,23 @@ const AIChatScreen = () => {
         }
 
         return () => {
+            if (!isMounted.current) return;
+
             // Reset padding
             setBottomPadding(0);
 
             // Restore bottom tabs when leaving this screen
-            navigation.getParent()?.setOptions({
-                tabBarStyle: undefined,
-                tabBarVisible: undefined,
-            });
+            const parent = navigation.getParent();
+            if (parent) {
+                parent.setOptions({
+                    tabBarStyle: undefined,
+                    tabBarVisible: undefined,
+                });
 
-            // Also reset navigation params
-            navigation.getParent()?.setParams({
-                hideTabBar: false
-            });
+                parent.setParams({
+                    hideTabBar: false
+                });
+            }
 
             // Restore status bar
             if (Platform.OS === 'android') {
@@ -135,7 +152,9 @@ const AIChatScreen = () => {
 
     // Set up pulsing animation
     useEffect(() => {
-        Animated.loop(
+        if (!isMounted.current) return;
+
+        const pulseAnimation = Animated.loop(
             Animated.sequence([
                 Animated.timing(pulseAnim, {
                     toValue: 1.08,
@@ -148,11 +167,17 @@ const AIChatScreen = () => {
                     useNativeDriver: true,
                 }),
             ])
-        ).start();
+        );
+
+        pulseAnimation.start();
+
+        return () => {
+            pulseAnimation.stop();
+        };
     }, []);
 
     // Handle sending a new message
-    const handleSend = () => {
+    const handleSend = useCallback(() => {
         if (inputText.trim() === '') return;
 
         const newUserMessage: Message = {
@@ -167,7 +192,9 @@ const AIChatScreen = () => {
         setIsTyping(true);
 
         // Simulate AI response delay
-        setTimeout(() => {
+        const responseTimer = setTimeout(() => {
+            if (!isMounted.current) return;
+
             const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
             const newAIMessage: Message = {
                 id: (Date.now() + 1).toString(),
@@ -179,21 +206,25 @@ const AIChatScreen = () => {
             setMessages(prevMessages => [...prevMessages, newAIMessage]);
             setIsTyping(false);
         }, 1500);
-    };
+
+        return () => clearTimeout(responseTimer);
+    }, [inputText]);
 
     // Auto-scroll to the latest message
     useEffect(() => {
-        if (messages.length > 0) {
-            setTimeout(() => {
+        if (messages.length > 0 && isMounted.current) {
+            const scrollTimer = setTimeout(() => {
                 flatListRef.current?.scrollToEnd({ animated: true });
             }, 100);
+
+            return () => clearTimeout(scrollTimer);
         }
     }, [messages]);
 
-    // Navigate back
-    const navigateBack = () => {
+    // Navigate back safely
+    const navigateBack = useCallback(() => {
         navigation.goBack();
-    };
+    }, [navigation]);
 
     // Animated dots for typing indicator
     const [dotOpacities] = useState([
@@ -204,6 +235,8 @@ const AIChatScreen = () => {
 
     // Animate typing dots
     useEffect(() => {
+        if (!isMounted.current) return;
+
         if (isTyping) {
             const animations = dotOpacities.map((opacity, i) => {
                 return Animated.sequence([
@@ -221,150 +254,164 @@ const AIChatScreen = () => {
                 ]);
             });
 
-            Animated.loop(
+            const typingAnimation = Animated.loop(
                 Animated.stagger(100, animations)
-            ).start();
+            );
+
+            typingAnimation.start();
+
+            return () => {
+                typingAnimation.stop();
+            };
         } else {
             dotOpacities.forEach(opacity => {
                 opacity.setValue(0.4);
             });
         }
-
-        return () => {
-            dotOpacities.forEach(opacity => {
-                opacity.stopAnimation();
-            });
-        };
     }, [isTyping]);
 
-    // Fetch saved items - updated to use ProductContext
-    const fetchSavedItems = async () => {
-        if (isLoadingSavedItems) return; // Prevent multiple simultaneous fetches
+    // Fetch saved items with better error handling and state management
+    const fetchSavedItems = useCallback(async () => {
+        if (!isMounted.current || isLoadingSavedItems) return Promise.resolve();
 
         try {
-            setIsLoadingSavedItems(true);
-
             // Use savedItemIds from context
             if (!savedItemIds || savedItemIds.length === 0) {
-                // Set empty items right away to prevent UI freeze
-                setSavedItems([]);
-                setTimeout(() => setIsLoadingSavedItems(false), 300);
-                return;
+                if (isMounted.current) {
+                    setSavedItems([]);
+                }
+                return Promise.resolve();
             }
 
             console.log("AIChatScreen: Fetching saved items with IDs:", savedItemIds);
 
-            // Use a minimal fallback dataset first, then update with real data
-            setSavedItems([{
-                id: 'loading-placeholder',
-                title: 'Loading...',
-                price: 0,
-                description: 'Loading saved items',
-                images: ['https://placehold.co/600x800/E0F7FA/2C3E50?text=Loading'],
+            // Prepare a set of fallback items in case loading fails
+            const fallbackItems = [{
+                id: '1',
+                title: 'Vintage Denim Jacket',
+                price: 45.00,
+                description: 'Classic vintage denim jacket, perfect for all seasons',
+                images: ['https://placehold.co/600x800/E0F7FA/2C3E50?text=Denim+Jacket'],
                 condition: 'good',
-                seller_id: 'loading',
-                sellerName: 'loading',
-                sustainability: 0,
-                sustainability_badges: [],
+                seller_id: 'user1',
+                sellerName: 'ameliegong',
+                sustainability: 85,
+                sustainability_badges: ['Vintage', 'Secondhand'],
                 sustainability_info: {},
                 created_at: new Date(),
                 updated_at: new Date(),
-            }]);
+            }];
 
-            // Fetch real data in background
-            setTimeout(async () => {
-                try {
-                    // Limit to 10 items to prevent performance issues
-                    const itemIds = savedItemIds.slice(0, 10);
+            try {
+                // Limit to 5 items to prevent performance issues
+                const itemIds = savedItemIds.slice(0, 5);
 
-                    // Fetch all items in parallel
-                    const items = await Promise.all(
-                        itemIds.map((id) => ProductService.getProductById(id))
-                    );
+                // Create a fetch promise with timeout
+                const fetchWithTimeout = async (timeoutMs: number) => {
+                    return new Promise<Product[]>((resolve, reject) => {
+                        // Set timeout
+                        const timeoutId = setTimeout(() => {
+                            reject(new Error('Fetch timeout'));
+                        }, timeoutMs);
 
-                    // Filter out nulls
-                    const validItems = items.filter(Boolean) as Product[];
+                        // Do the actual fetch
+                        Promise.all(
+                            itemIds.map(id => ProductService.getProductById(id))
+                        )
+                            .then(items => {
+                                clearTimeout(timeoutId);
+                                // Filter out nulls
+                                const validItems = items.filter(Boolean) as Product[];
+                                resolve(validItems);
+                            })
+                            .catch(err => {
+                                clearTimeout(timeoutId);
+                                reject(err);
+                            });
+                    });
+                };
 
-                    // Update state with real data
+                // Fetch with 5 second timeout
+                const validItems = await fetchWithTimeout(5000);
+
+                // Update state with real data if we have items, otherwise use fallbacks
+                if (isMounted.current) {
                     if (validItems.length > 0) {
                         setSavedItems(validItems);
                     } else {
-                        // Use fallback data if no valid items
-                        setSavedItems([
-                            // Fallback items here (keep the existing ones)
-                            {
-                                id: '1',
-                                title: 'Vintage Denim Jacket',
-                                price: 45.00,
-                                description: 'Classic vintage denim jacket, perfect for all seasons',
-                                images: ['https://placehold.co/600x800/E0F7FA/2C3E50?text=Denim+Jacket'],
-                                condition: 'good',
-                                seller_id: 'user1',
-                                sellerName: 'ameliegong',
-                                sustainability: 85,
-                                sustainability_badges: ['Vintage', 'Secondhand'],
-                                sustainability_info: {},
-                                created_at: new Date(),
-                                updated_at: new Date(),
-                            },
-                            // Keep other fallback items
-                        ]);
+                        setSavedItems(fallbackItems);
                     }
-                } catch (error) {
-                    console.error('Error fetching saved items in background:', error);
-                    // Use fallback data in case of error
-                    setSavedItems([
-                        // Keep the same fallback items
-                    ]);
-                } finally {
-                    // Ensure loading state is turned off after background fetch
-                    setIsLoadingSavedItems(false);
                 }
-            }, 100);
-
+            } catch (error) {
+                console.error('Error fetching saved items:', error);
+                // Use fallback data in case of error
+                if (isMounted.current) {
+                    setSavedItems(fallbackItems);
+                }
+            }
         } catch (error) {
             console.error('Error initializing saved items fetch:', error);
-            setIsLoadingSavedItems(false);
-            setSavedItems([]);
         }
-    };
 
-    // Handle showing saved items modal - add debounce to prevent multiple taps
-    const [isModalOpening, setIsModalOpening] = useState(false);
+        return Promise.resolve();
+    }, [savedItemIds]);
 
+    // Open modal with better state management
     const openSavedItemsModal = useCallback(() => {
-        if (isModalOpening) return;
+        if (!isMounted.current) return;
 
-        // Set debounce flag
-        setIsModalOpening(true);
-
-        // First show modal with loading state
+        // First show modal and loading state
         setIsSavedItemsModalVisible(true);
+        setIsLoadingSavedItems(true);
 
         // Then fetch data
-        fetchSavedItems();
+        fetchSavedItems().finally(() => {
+            // Only update state if component is still mounted
+            if (isMounted.current) {
+                setIsLoadingSavedItems(false);
+            }
+        });
+    }, [fetchSavedItems]);
 
-        // Reset debounce flag after delay
-        setTimeout(() => {
-            setIsModalOpening(false);
-        }, 500);
-    }, [isModalOpening, fetchSavedItems]);
+    // Close modal safely
+    const closeSavedItemsModal = useCallback(() => {
+        if (!isMounted.current) return;
 
-    // Handle sending a saved item in chat
-    const handleSendSavedItem = (item: Product) => {
-        const itemText = `Can you tell me more about this ${item.title}? It costs $${item.price.toFixed(2)} and has sustainability score of ${item.sustainability}/100.`;
-
-        setInputText(itemText);
         setIsSavedItemsModalVisible(false);
 
-        // Optional: Automatically send the message
-        setTimeout(() => {
-            handleSend();
-        }, 100);
-    };
+        // Wait for animation to complete before clearing items
+        const clearTimer = setTimeout(() => {
+            if (isMounted.current) {
+                setSavedItems([]);
+            }
+        }, 300);
 
-    // Render individual message item
-    const renderItem = ({ item }: { item: Message }) => (
+        return () => clearTimeout(clearTimer);
+    }, []);
+
+    // Handle sending saved item in chat
+    const handleSendSavedItem = useCallback((item: Product) => {
+        if (!isMounted.current) return;
+
+        // First update input text
+        const itemText = `Can you tell me more about this ${item.title}? It costs $${item.price.toFixed(2)} and has sustainability score of ${item.sustainability}/100.`;
+        setInputText(itemText);
+
+        // Close modal
+        closeSavedItemsModal();
+
+        // Wait for UI to update before sending
+        const sendTimer = setTimeout(() => {
+            if (isMounted.current) {
+                handleSend();
+            }
+        }, 800);
+
+        return () => clearTimeout(sendTimer);
+    }, [closeSavedItemsModal, handleSend]);
+
+    // Render message item
+    const renderItem = useCallback(({ item }: { item: Message }) => (
         <View
             style={[
                 styles.messageBubble,
@@ -401,10 +448,10 @@ const AIChatScreen = () => {
                 {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
         </View>
-    );
+    ), [WHITE]);
 
     // Render saved item in modal
-    const renderSavedItem = ({ item }: { item: Product }) => {
+    const renderSavedItem = useCallback(({ item }: { item: Product }) => {
         const imageUri = item.images && item.images.length > 0
             ? item.images[0]
             : 'https://placehold.co/600x800/E0F7FA/2C3E50?text=No+Image';
@@ -413,6 +460,7 @@ const AIChatScreen = () => {
             <TouchableOpacity
                 style={styles.savedItemContainer}
                 onPress={() => handleSendSavedItem(item)}
+                activeOpacity={0.7}
             >
                 <Image source={{ uri: imageUri }} style={styles.savedItemImage} />
                 <View style={styles.savedItemInfo}>
@@ -430,304 +478,270 @@ const AIChatScreen = () => {
                 </View>
             </TouchableOpacity>
         );
-    };
-
-    // Another effective approach to hide the bottom navigation in some implementations
-    // is to use a screen wrapper with full height
-    const FullScreenWrapper = ({ children }: { children: React.ReactNode }) => (
-        <View style={{ flex: 1, width: '100%', height: '100%' }}>
-            {children}
-        </View>
-    );
+    }, [handleSendSavedItem, TEAL_DARK]);
 
     return (
-        <View style={{
-            position: 'absolute',
-            width: width,
-            height: height,
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 9999,
-            backgroundColor: TEAL_DARK,
-        }}>
-            <FullScreenWrapper>
-                <SafeAreaView style={[styles.safeArea]} edges={['top']}>
-                    <StatusBar style="light" />
-                    <View style={styles.container}>
-                        {/* Background Gradient */}
-                        <LinearGradient
-                            colors={[TEAL_DARK, TEAL_MEDIUM, TEAL_LIGHT]}
-                            style={styles.backgroundGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 0, y: 0.8 }}
-                        />
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+            <StatusBar style="light" />
+            <View style={styles.container}>
+                {/* Background Gradient */}
+                <LinearGradient
+                    colors={[TEAL_DARK, TEAL_MEDIUM, TEAL_LIGHT]}
+                    style={styles.backgroundGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 0.8 }}
+                />
 
-                        {/* Header */}
-                        <View style={styles.header}>
-                            <TouchableOpacity
-                                style={styles.backButton}
-                                onPress={navigateBack}
-                            >
-                                <Ionicons name="chevron-back" size={30} color={WHITE} />
-                            </TouchableOpacity>
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={navigateBack}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Ionicons name="chevron-back" size={30} color={WHITE} />
+                    </TouchableOpacity>
 
-                            <View style={styles.headerCenter}>
-                                <Animated.View style={[
-                                    styles.avatarContainer,
-                                    { transform: [{ scale: pulseAnim }] }
-                                ]}>
-                                    <View style={styles.avatarInner}>
-                                        <Ionicons name="star" size={22} color={WHITE} />
-                                    </View>
-                                </Animated.View>
-
-                                <View>
-                                    <Text style={styles.headerTitle}>Echo</Text>
-                                    <Text style={styles.headerSubtitle}>Your Personal Stylist</Text>
-                                </View>
+                    <View style={styles.headerCenter}>
+                        <Animated.View style={[
+                            styles.avatarContainer,
+                            { transform: [{ scale: pulseAnim }] }
+                        ]}>
+                            <View style={styles.avatarInner}>
+                                <Ionicons name="star" size={22} color={WHITE} />
                             </View>
+                        </Animated.View>
 
-                            <View style={styles.onlineBadge}>
-                                <View style={styles.onlineDot} />
-                                <Text style={styles.onlineText}>Online</Text>
-                            </View>
+                        <View>
+                            <Text style={styles.headerTitle}>Echo</Text>
+                            <Text style={styles.headerSubtitle}>Your Personal Stylist</Text>
                         </View>
-
-                        {/* Chat Area */}
-                        <View style={styles.chatContainer}>
-                            <FlatList
-                                ref={flatListRef}
-                                data={messages}
-                                renderItem={renderItem}
-                                keyExtractor={item => item.id}
-                                contentContainerStyle={styles.messagesList}
-                                showsVerticalScrollIndicator={false}
-                            />
-
-                            {/* Typing Indicator */}
-                            {isTyping && (
-                                <View style={styles.typingContainer}>
-                                    <View style={styles.typingBubble}>
-                                        <View style={styles.typingAvatarContainer}>
-                                            <Image
-                                                source={require('../../../assets/icon.png')}
-                                                style={styles.typingAvatar}
-                                            />
-                                        </View>
-                                        <Animated.View style={[styles.typingDot, { opacity: dotOpacities[0] }]} />
-                                        <Animated.View style={[styles.typingDot, { opacity: dotOpacities[1] }]} />
-                                        <Animated.View style={[styles.typingDot, { opacity: dotOpacities[2] }]} />
-                                    </View>
-                                </View>
-                            )}
-                        </View>
-
-                        {/* Quick Suggestions - Moved above input area */}
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.suggestionsContainer}
-                            style={styles.suggestionsScrollView}
-                        >
-                            {[
-                                'Sustainable fabrics',
-                                'Outfit ideas',
-                                'Eco-friendly brands',
-                                'Capsule wardrobe',
-                                'Ethical fashion',
-                                'Thrift tips',
-                            ].map((suggestion, index) => (
-                                <TouchableOpacity
-                                    key={index}
-                                    style={styles.suggestionPill}
-                                    onPress={() => setInputText(suggestion)}
-                                >
-                                    <Text style={styles.suggestionText}>{suggestion}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-
-                        {/* Input Area - Redesigned */}
-                        <KeyboardAvoidingView
-                            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                            keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
-                            style={[
-                                styles.inputArea,
-                                { paddingBottom: bottomPadding }
-                            ]}
-                        >
-                            {/* Chat Tools */}
-                            <View style={styles.chatToolsContainer}>
-                                <TouchableOpacity
-                                    style={styles.chatToolButton}
-                                    onPress={openSavedItemsModal}
-                                >
-                                    <LinearGradient
-                                        colors={['#a2d2c5', TEAL_MEDIUM]}
-                                        style={styles.chatToolButtonGradient}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                    >
-                                        <Ionicons name="heart" size={18} color={WHITE} />
-                                    </LinearGradient>
-                                    <Text style={styles.chatToolText}>Items</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity style={styles.chatToolButton}>
-                                    <LinearGradient
-                                        colors={['#9bc7d4', '#3c8797']}
-                                        style={styles.chatToolButtonGradient}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                    >
-                                        <Ionicons name="camera" size={18} color={WHITE} />
-                                    </LinearGradient>
-                                    <Text style={styles.chatToolText}>Camera</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity style={styles.chatToolButton}>
-                                    <LinearGradient
-                                        colors={['#93c2bc', '#42827a']}
-                                        style={styles.chatToolButtonGradient}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                    >
-                                        <MaterialCommunityIcons name="palette-swatch" size={18} color={WHITE} />
-                                    </LinearGradient>
-                                    <Text style={styles.chatToolText}>Style</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity style={styles.chatToolButton}>
-                                    <LinearGradient
-                                        colors={['#8ab5c7', '#317996']}
-                                        style={styles.chatToolButtonGradient}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                    >
-                                        <Ionicons name="leaf" size={18} color={WHITE} />
-                                    </LinearGradient>
-                                    <Text style={styles.chatToolText}>Eco</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.inputContainer}>
-                                <TextInput
-                                    style={styles.textInput}
-                                    placeholder="Ask Echo for fashion advice..."
-                                    placeholderTextColor="rgba(0,0,0,0.4)"
-                                    value={inputText}
-                                    onChangeText={setInputText}
-                                    multiline
-                                    maxLength={500}
-                                />
-                                <TouchableOpacity
-                                    style={[
-                                        styles.sendButton,
-                                        { opacity: inputText.trim() === '' ? 0.6 : 1 }
-                                    ]}
-                                    onPress={handleSend}
-                                    disabled={inputText.trim() === ''}
-                                >
-                                    <LinearGradient
-                                        colors={[TEAL_MEDIUM, TEAL_DARK]}
-                                        style={styles.sendButtonGradient}
-                                    >
-                                        <Ionicons name="send" size={20} color={WHITE} />
-                                    </LinearGradient>
-                                </TouchableOpacity>
-                            </View>
-                        </KeyboardAvoidingView>
-
-                        {/* Saved Items Modal - Reimplemented for better performance */}
-                        {isSavedItemsModalVisible && (
-                            <Modal
-                                visible={true}
-                                transparent={true}
-                                animationType="fade"
-                                onRequestClose={() => {
-                                    setIsSavedItemsModalVisible(false);
-                                    // Important: clear items when closing to prevent memory issues
-                                    setSavedItems([]);
-                                }}
-                            >
-                                <TouchableOpacity
-                                    activeOpacity={1}
-                                    style={styles.modalBackdrop}
-                                    onPress={() => setIsSavedItemsModalVisible(false)}
-                                >
-                                    <View
-                                        style={styles.modalContainer}
-                                        onStartShouldSetResponder={() => true}
-                                        onTouchEnd={(e) => {
-                                            e.stopPropagation();
-                                        }}
-                                    >
-                                        <TouchableWithoutFeedback>
-                                            <View style={[
-                                                styles.modalContent,
-                                                {
-                                                    backgroundColor: WHITE,
-                                                    borderRadius: 20,
-                                                    maxHeight: height * 0.6,
-                                                }
-                                            ]}>
-                                                <View style={styles.modalHeader}>
-                                                    <Text style={styles.modalTitle}>Saved Items</Text>
-                                                    <TouchableOpacity
-                                                        style={styles.modalCloseButton}
-                                                        onPress={() => setIsSavedItemsModalVisible(false)}
-                                                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                                                    >
-                                                        <Ionicons name="close" size={24} color="#333" />
-                                                    </TouchableOpacity>
-                                                </View>
-
-                                                <Text style={styles.modalSubtitle}>Select an item to share with Echo</Text>
-
-                                                {isLoadingSavedItems ? (
-                                                    <View style={styles.loadingContainer}>
-                                                        <ActivityIndicator size="large" color={TEAL_MEDIUM} />
-                                                        <Text style={styles.loadingText}>Loading your saved items...</Text>
-                                                    </View>
-                                                ) : savedItems.length > 0 ? (
-                                                    <FlatList
-                                                        data={savedItems}
-                                                        renderItem={renderSavedItem}
-                                                        keyExtractor={item => item.id}
-                                                        contentContainerStyle={styles.savedItemsList}
-                                                        showsVerticalScrollIndicator={false}
-                                                        initialNumToRender={4}
-                                                        maxToRenderPerBatch={2}
-                                                        windowSize={3}
-                                                        removeClippedSubviews={true}
-                                                    />
-                                                ) : (
-                                                    <View style={styles.noItemsContainer}>
-                                                        <Ionicons name="heart-outline" size={60} color="#ccc" />
-                                                        <Text style={styles.noItemsText}>No saved items yet</Text>
-                                                        <Text style={styles.noItemsSubtext}>
-                                                            Items you save will appear here for you to share with Echo
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        </TouchableWithoutFeedback>
-                                    </View>
-                                </TouchableOpacity>
-                            </Modal>
-                        )}
                     </View>
-                </SafeAreaView>
-            </FullScreenWrapper>
-        </View>
+
+                    <View style={styles.onlineBadge}>
+                        <View style={styles.onlineDot} />
+                        <Text style={styles.onlineText}>Online</Text>
+                    </View>
+                </View>
+
+                {/* Chat Area */}
+                <View style={styles.chatContainer}>
+                    <FlatList
+                        ref={flatListRef}
+                        data={messages}
+                        renderItem={renderItem}
+                        keyExtractor={item => item.id}
+                        contentContainerStyle={styles.messagesList}
+                        showsVerticalScrollIndicator={false}
+                        removeClippedSubviews={false}
+                        maxToRenderPerBatch={10}
+                        windowSize={10}
+                    />
+
+                    {/* Typing Indicator */}
+                    {isTyping && (
+                        <View style={styles.typingContainer}>
+                            <View style={styles.typingBubble}>
+                                <View style={styles.typingAvatarContainer}>
+                                    <Image
+                                        source={require('../../../assets/icon.png')}
+                                        style={styles.typingAvatar}
+                                    />
+                                </View>
+                                <Animated.View style={[styles.typingDot, { opacity: dotOpacities[0] }]} />
+                                <Animated.View style={[styles.typingDot, { opacity: dotOpacities[1] }]} />
+                                <Animated.View style={[styles.typingDot, { opacity: dotOpacities[2] }]} />
+                            </View>
+                        </View>
+                    )}
+                </View>
+
+                {/* Quick Suggestions */}
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.suggestionsContainer}
+                    style={styles.suggestionsScrollView}
+                >
+                    {[
+                        'Sustainable fabrics',
+                        'Outfit ideas',
+                        'Eco-friendly brands',
+                        'Capsule wardrobe',
+                        'Ethical fashion',
+                        'Thrift tips',
+                    ].map((suggestion, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            style={styles.suggestionPill}
+                            onPress={() => setInputText(suggestion)}
+                        >
+                            <Text style={styles.suggestionText}>{suggestion}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+
+                {/* Input Area */}
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
+                    style={[
+                        styles.inputArea,
+                        { paddingBottom: bottomPadding }
+                    ]}
+                >
+                    {/* Chat Tools */}
+                    <View style={styles.chatToolsContainer}>
+                        <TouchableOpacity
+                            style={styles.chatToolButton}
+                            onPress={openSavedItemsModal}
+                            hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+                        >
+                            <LinearGradient
+                                colors={['#a2d2c5', TEAL_MEDIUM]}
+                                style={styles.chatToolButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Ionicons name="heart" size={18} color={WHITE} />
+                            </LinearGradient>
+                            <Text style={styles.chatToolText}>Items</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.chatToolButton}>
+                            <LinearGradient
+                                colors={['#9bc7d4', '#3c8797']}
+                                style={styles.chatToolButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Ionicons name="camera" size={18} color={WHITE} />
+                            </LinearGradient>
+                            <Text style={styles.chatToolText}>Camera</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.chatToolButton}>
+                            <LinearGradient
+                                colors={['#93c2bc', '#42827a']}
+                                style={styles.chatToolButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <MaterialCommunityIcons name="palette-swatch" size={18} color={WHITE} />
+                            </LinearGradient>
+                            <Text style={styles.chatToolText}>Style</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.chatToolButton}>
+                            <LinearGradient
+                                colors={['#8ab5c7', '#317996']}
+                                style={styles.chatToolButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Ionicons name="leaf" size={18} color={WHITE} />
+                            </LinearGradient>
+                            <Text style={styles.chatToolText}>Eco</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.inputContainer}>
+                        <TextInput
+                            style={styles.textInput}
+                            placeholder="Ask Echo for fashion advice..."
+                            placeholderTextColor="rgba(0,0,0,0.4)"
+                            value={inputText}
+                            onChangeText={setInputText}
+                            multiline
+                            maxLength={500}
+                        />
+                        <TouchableOpacity
+                            style={[
+                                styles.sendButton,
+                                { opacity: inputText.trim() === '' ? 0.6 : 1 }
+                            ]}
+                            onPress={handleSend}
+                            disabled={inputText.trim() === ''}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <LinearGradient
+                                colors={[TEAL_MEDIUM, TEAL_DARK]}
+                                style={styles.sendButtonGradient}
+                            >
+                                <Ionicons name="send" size={20} color={WHITE} />
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+                </KeyboardAvoidingView>
+
+                {/* Saved Items Modal */}
+                <Modal
+                    visible={isSavedItemsModalVisible}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={closeSavedItemsModal}
+                    statusBarTranslucent={true}
+                    hardwareAccelerated={true}
+                >
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback onPress={closeSavedItemsModal}>
+                            <View style={styles.modalBackdrop} />
+                        </TouchableWithoutFeedback>
+
+                        <View style={styles.modalContainer}>
+                            <View style={styles.modalContent}>
+                                <View style={styles.modalHeader}>
+                                    <Text style={styles.modalTitle}>Saved Items</Text>
+                                    <TouchableOpacity
+                                        style={styles.modalCloseButton}
+                                        onPress={closeSavedItemsModal}
+                                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                                    >
+                                        <Ionicons name="close" size={24} color="#333" />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <Text style={styles.modalSubtitle}>Select an item to share with Echo</Text>
+
+                                {isLoadingSavedItems ? (
+                                    <View style={styles.loadingContainer}>
+                                        <ActivityIndicator size="large" color={TEAL_MEDIUM} />
+                                        <Text style={styles.loadingText}>Loading your saved items...</Text>
+                                    </View>
+                                ) : savedItems.length > 0 ? (
+                                    <FlatList
+                                        data={savedItems}
+                                        renderItem={renderSavedItem}
+                                        keyExtractor={item => item.id}
+                                        contentContainerStyle={styles.savedItemsList}
+                                        showsVerticalScrollIndicator={true}
+                                        initialNumToRender={2}
+                                        maxToRenderPerBatch={2}
+                                        windowSize={2}
+                                        removeClippedSubviews={true}
+                                    />
+                                ) : (
+                                    <View style={styles.noItemsContainer}>
+                                        <Ionicons name="heart-outline" size={60} color="#ccc" />
+                                        <Text style={styles.noItemsText}>No saved items yet</Text>
+                                        <Text style={styles.noItemsSubtext}>
+                                            Items you save will appear here for you to share with Echo
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+            </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
+        backgroundColor: '#22606e',
     },
     container: {
         flex: 1,
@@ -1024,23 +1038,34 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 2,
     },
-    modalBackdrop: {
+    modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    modalBackdrop: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
     },
     modalContainer: {
         width: width * 0.9,
         maxHeight: height * 0.7,
+        backgroundColor: 'white',
         borderRadius: 20,
         overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
     },
     modalContent: {
-        width: width * 0.9,
-        maxHeight: height * 0.7,
-        borderRadius: 20,
-        overflow: 'hidden',
+        width: '100%',
+        height: '100%',
     },
     modalHeader: {
         flexDirection: 'row',
@@ -1156,13 +1181,6 @@ const styles = StyleSheet.create({
         color: '#666',
         textAlign: 'center',
         lineHeight: 20,
-    },
-    blurBackground: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        bottom: 0,
-        right: 0
     },
 });
 
