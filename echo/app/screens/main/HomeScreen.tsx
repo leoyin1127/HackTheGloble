@@ -205,6 +205,9 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
     const swiper = useRef<Swiper>(null);
     const scrollY = useRef(new Animated.Value(0)).current;
 
+    // Add state for showing measurements overlay
+    const [showMeasurements, setShowMeasurements] = useState(false);
+
     // Navigation handler for ImageTest screen
     const navigateToImageTest = () => {
         navigation.navigate('ImageTest');
@@ -248,7 +251,7 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                 console.error('HomeScreen: Error loading products:', error);
                 // Use fallback data if database fails
                 console.log("HomeScreen: Using fallback data");
-                const fallbackData = getFallbackProducts();
+                const fallbackData = getFallbackData();
                 // Filter out undergarments from fallback data too
                 const filteredFallbackData = fallbackData.filter(product => !isUndergarment(product));
                 // Track fallback product IDs
@@ -572,6 +575,79 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                 return p;
             });
         });
+    };
+
+    // Add handlers for the new buttons
+    const handleAIChatPress = () => {
+        // Navigate to AI Chat screen or open modal
+        Alert.alert('AI Fashion Stylist', 'Would you like fashion advice from our AI stylist?', [
+            {
+                text: 'Cancel',
+                style: 'cancel'
+            },
+            {
+                text: 'Chat Now',
+                onPress: () => {
+                    // Replace with actual navigation to AI chat screen when implemented
+                    Alert.alert('AI Stylist', 'Welcome to your personalized fashion consultation!');
+                }
+            }
+        ]);
+    };
+
+    // Update the measurements handler to toggle the overlay
+    const handleMeasurementsPress = () => {
+        // Toggle measurements overlay visibility
+        setShowMeasurements(!showMeasurements);
+    };
+
+    // Render measurements overlay
+    const renderMeasurementsOverlay = () => {
+        if (!showMeasurements) return null;
+
+        const currentItem = filteredItems[currentIndex];
+        if (!currentItem) return null;
+
+        return (
+            <View style={styles.measurementsOverlay}>
+                <BlurView
+                    intensity={30}
+                    style={[
+                        styles.measurementsContainer,
+                        { borderRadius: borderRadius.lg }
+                    ]}
+                >
+                    <View style={styles.measurementsHeader}>
+                        <Text style={[styles.measurementsTitle, { color: colors.neutral.white }]}>
+                            Size Visualization
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.closeMeasurementsButton}
+                            onPress={() => setShowMeasurements(false)}
+                        >
+                            <Ionicons name="close-circle" size={24} color={colors.neutral.white} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Sample Measurements Lines */}
+                    <View style={[styles.measurementLine, styles.shoulderLine]}>
+                        <Text style={styles.measurementText}>Shoulder: 45cm</Text>
+                    </View>
+                    <View style={[styles.measurementLine, styles.chestLine]}>
+                        <Text style={styles.measurementText}>Chest: 98cm</Text>
+                    </View>
+                    <View style={[styles.measurementLine, styles.waistLine]}>
+                        <Text style={styles.measurementText}>Waist: 85cm</Text>
+                    </View>
+                    <View style={[styles.measurementLine, styles.hipLine]}>
+                        <Text style={styles.measurementText}>Hip: 95cm</Text>
+                    </View>
+                    <View style={[styles.measurementLine, styles.lengthLine]}>
+                        <Text style={styles.measurementText}>Length: 75cm</Text>
+                    </View>
+                </BlurView>
+            </View>
+        );
     };
 
     const renderCard = () => {
@@ -910,6 +986,30 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                         <Ionicons name="close" size={26} color={colors.neutral.white} />
                     </TouchableOpacity>
 
+                    <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: colors.accent.beige }]}
+                        onPress={handleAIChatPress}
+                    >
+                        <View style={styles.aiButtonContainer}>
+                            <Ionicons name="chatbubble-ellipses" size={22} color={colors.neutral.white} />
+                            <View style={[styles.aiBadge, { backgroundColor: colors.primary.main }]}>
+                                <Text style={styles.aiBadgeText}>AI</Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: colors.accent.mint }]}
+                        onPress={handleMeasurementsPress}
+                    >
+                        <View style={styles.buttonWithBadgeContainer}>
+                            <Ionicons name="resize" size={24} color={colors.neutral.white} />
+                            <View style={[styles.betaBadge, { backgroundColor: colors.accent.dark }]}>
+                                <Text style={styles.betaBadgeText}>BETA</Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary.main }]} onPress={swipeRight}>
                         <Ionicons name="heart-outline" size={26} color={colors.neutral.white} />
                     </TouchableOpacity>
@@ -1048,6 +1148,8 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                 {filteredItems.length > 0 ? (
                     <>
                         {showGoodChoice ? renderGoodChoiceScreen() : renderCard()}
+                        {/* Render measurements overlay when activated */}
+                        {renderMeasurementsOverlay()}
                     </>
                 ) : (
                     <View style={styles.emptyStateContainer}>
@@ -1293,9 +1395,9 @@ const styles = StyleSheet.create({
     actionButtonsRow: {
         width: '100%',
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'space-evenly',
         alignItems: 'center',
-        paddingHorizontal: 20,
+        paddingHorizontal: 16,
         paddingVertical: 16,
     },
     actionButton: {
@@ -1524,6 +1626,128 @@ const styles = StyleSheet.create({
     },
     sustainabilityMetrics: {
         // Placeholder for sustainability metrics
+    },
+    measurementsOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 999,
+    },
+    measurementsContainer: {
+        position: 'absolute',
+        top: '10%',
+        left: '10%',
+        width: '80%',
+        height: '80%',
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        borderRadius: 20,
+        padding: 20,
+    },
+    measurementsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    measurementsTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+    },
+    closeMeasurementsButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    measurementLine: {
+        position: 'absolute',
+        height: 1,
+        backgroundColor: 'white',
+        width: 100,
+    },
+    shoulderLine: {
+        top: '20%',
+        left: '25%',
+        width: '50%',
+    },
+    chestLine: {
+        top: '30%',
+        left: '20%',
+        width: '60%',
+    },
+    waistLine: {
+        top: '45%',
+        left: '25%',
+        width: '50%',
+    },
+    hipLine: {
+        top: '60%',
+        left: '20%',
+        width: '60%',
+    },
+    lengthLine: {
+        top: '75%',
+        left: '45%',
+        height: '25%',
+        width: 1,
+    },
+    measurementText: {
+        position: 'absolute',
+        left: '105%',
+        top: -10,
+        color: 'white',
+        fontSize: 14,
+        fontWeight: 'bold',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        padding: 2,
+        borderRadius: 4,
+    },
+    aiButtonContainer: {
+        position: 'relative',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: '100%',
+        height: '100%',
+    },
+    aiBadge: {
+        position: 'absolute',
+        top: -5,
+        right: -5,
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+        borderRadius: 4,
+        minWidth: 20,
+        alignItems: 'center',
+    },
+    aiBadgeText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: 'white',
+    },
+    buttonWithBadgeContainer: {
+        position: 'relative',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: '100%',
+        height: '100%',
+    },
+    betaBadge: {
+        position: 'absolute',
+        top: -5,
+        right: -5,
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+        borderRadius: 4,
+        minWidth: 20,
+        alignItems: 'center',
+    },
+    betaBadgeText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: 'white',
     },
 });
 

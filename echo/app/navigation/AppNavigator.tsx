@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Platform, TouchableOpacity, Text } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
@@ -26,6 +26,7 @@ import CommunityScreen from '../screens/main/CommunityScreen';
 import ChatScreen from '../screens/main/ChatScreen';
 import SavedItemsScreen from '../screens/main/SavedItemsScreen';
 import ChatListScreen from '../screens/main/ChatListScreen';
+import AIChatScreen from '../screens/main/AIChatScreen';
 
 // Test Components
 import ImageTest from '../components/ImageTest';
@@ -65,6 +66,7 @@ export type MainStackParamList = {
     Saved: undefined;
     ChatList: undefined;
     ImageTest: undefined;
+    AIChat: undefined;
 };
 
 export type TabParamList = {
@@ -140,6 +142,9 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
                         ? '#FFFFFF'
                         : 'rgba(255,255,255,0.7)';
 
+                    // Check if this is the Messages tab
+                    const isMessagesTab = route.name === 'Messages';
+
                     return (
                         <TouchableOpacity
                             key={index}
@@ -162,7 +167,19 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
                                 }
                             ]}
                         >
-                            <Ionicons name={iconName} size={24} color={iconColor} />
+                            {isMessagesTab ? (
+                                <View style={{ position: 'relative', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Ionicons name={iconName} size={24} color={iconColor} />
+                                    <View style={[styles.aiBadge, {
+                                        backgroundColor: colors.primary.main,
+                                        borderColor: isFocused ? 'white' : 'rgba(255,255,255,0.7)'
+                                    }]}>
+                                        <Text style={[styles.aiBadgeText, { color: 'white' }]}>AI</Text>
+                                    </View>
+                                </View>
+                            ) : (
+                                <Ionicons name={iconName} size={24} color={iconColor} />
+                            )}
                         </TouchableOpacity>
                     );
                 })}
@@ -226,6 +243,7 @@ const DiscoverStackNavigator = () => {
 const MessagesStackNavigator = () => {
     return (
         <MainStack.Navigator screenOptions={{ headerShown: false }}>
+            <MainStack.Screen name="AIChat" component={AIChatScreen} />
             <MainStack.Screen name="ChatList" component={ChatListScreen} />
         </MainStack.Navigator>
     );
@@ -272,6 +290,7 @@ const MainNavigator = () => (
         <MainStack.Screen name="ItemDetail" component={ItemDetailScreen} options={{ headerShown: false }} />
         <MainStack.Screen name="Checkout" component={CheckoutScreen} options={{ headerShown: false }} />
         <MainStack.Screen name="Chat" component={ChatScreen} options={{ headerShown: false }} />
+        <MainStack.Screen name="AIChat" component={AIChatScreen} options={{ headerShown: false }} />
     </MainStack.Navigator>
 );
 
@@ -317,6 +336,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginHorizontal: 8,
+    },
+    aiBadge: {
+        position: 'absolute',
+        top: 5,
+        right: 8,
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+        borderRadius: 4,
+        minWidth: 18,
+        height: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        zIndex: 1,
+    },
+    aiBadgeText: {
+        fontSize: 9,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        lineHeight: 12,
     },
 });
 
