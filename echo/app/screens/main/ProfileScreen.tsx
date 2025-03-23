@@ -20,7 +20,6 @@ const ProfileScreen = () => {
     const menuItems = [
         { icon: 'heart-outline', label: 'Saved Items', screen: 'Saved' },
         { icon: 'cart-outline', label: 'My Orders', screen: 'Cart' },
-        { icon: 'chatbubble-outline', label: 'Messages', screen: 'ChatList' },
         { icon: 'settings-outline', label: 'Settings' },
         { icon: 'help-circle-outline', label: 'Help & Support' },
         { icon: 'log-out-outline', label: 'Log Out' },

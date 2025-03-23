@@ -33,7 +33,6 @@ const ImageTest = () => {
                 const { data, error } = await supabase
                     .from('products')
                     .select('id, title, images')
-                    .limit(10);
 
                 if (error) {
                     throw error;

@@ -27,12 +27,16 @@ import ProductService, { Product, ProductFilters } from '../../services/ProductS
 import { useProducts } from '../../context/ProductContext';
 import Logo from '../../components/Logo';
 import Swiper from 'react-native-deck-swiper';
-import Screen from '../../components/Screen';
 
 type HomeScreenNavigationProp = StackNavigationProp<MainStackParamList, 'Home'>;
 
+interface HomeScreenProps {
+    navigation: HomeScreenNavigationProp;
+    route: any;
+}
+
 const { width, height } = Dimensions.get('window');
-const SWIPE_THRESHOLD = 120;
+const SWIPE_THRESHOLD = 80;
 
 // Sample data for fallback
 const FALLBACK_ITEMS = [
@@ -157,11 +161,12 @@ const isUndergarment = (product: Product): boolean => {
 
 const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
     const { colors, spacing, typography, borderRadius, shadows, animation } = useTheme();
-    const { featuredProducts, getFeaturedProducts, loading: productsLoading, error } = useProducts();
+    const { featuredProducts, getFeaturedProducts, loading: productsLoading, error, saveProduct } = useProducts();
 
     const [currentIndex, setCurrentIndex] = useState<number>(0);
-    const [savedItems, setSavedItems] = useState<string[]>([]);
     const [showGoodChoice, setShowGoodChoice] = useState(false);
+    const [showSavedNotification, setShowSavedNotification] = useState(false);
+    const [savedItemName, setSavedItemName] = useState('');
     const [showDetails, setShowDetails] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -202,11 +207,14 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
     const [loadedItemIds, setLoadedItemIds] = useState<Set<string>>(new Set());
 
     // Refs
-    const swiper = useRef<Swiper>(null);
+    const swiper = useRef<Swiper<Product>>(null);
     const scrollY = useRef(new Animated.Value(0)).current;
 
     // Add state for showing measurements overlay
     const [showMeasurements, setShowMeasurements] = useState(false);
+
+    // Add this with other refs (around line 205)
+    const currentItemRef = useRef<Product | null>(null);
 
     // Navigation handler for ImageTest screen
     const navigateToImageTest = () => {
@@ -329,19 +337,33 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
         }).start();
     }, [currentIndex]);
 
-    // Pan responder for swipe gestures
+    // Update the panResponder to use the ref instead of state
     const panResponder = useRef(
         PanResponder.create({
-            onStartShouldSetPanResponder: () => !showDetails,
+            onStartShouldSetPanResponder: () => !showDetails && !showGoodChoice,
+            onMoveShouldSetPanResponder: () => !showDetails && !showGoodChoice,
+            onPanResponderGrant: () => {
+                console.log('Pan responder granted');
+                // Store the current item using ref (synchronous) instead of state
+                if (filteredItems.length > currentIndex) {
+                    currentItemRef.current = filteredItems[currentIndex];
+                    console.log('Capturing current item:', filteredItems[currentIndex]?.id);
+                }
+            },
             onPanResponderMove: (_, gestureState) => {
+                console.log('Moving with dx:', gestureState.dx);
                 position.setValue({ x: gestureState.dx, y: gestureState.dy });
             },
             onPanResponderRelease: (_, gestureState) => {
+                console.log('Released with dx:', gestureState.dx, 'Threshold:', SWIPE_THRESHOLD);
                 if (gestureState.dx > SWIPE_THRESHOLD) {
+                    console.log('Swiping RIGHT to REJECT');
                     swipeLeft(); // Swipe right (card moves right) -> Nope
                 } else if (gestureState.dx < -SWIPE_THRESHOLD) {
-                    swipeRight(); // Swipe left (card moves left) -> Like
+                    console.log('Swiping LEFT to LIKE');
+                    swipeRight(true); // Swipe left (card moves left) -> Like, pass true to indicate it's from swipe
                 } else {
+                    console.log('Not enough movement, resetting position');
                     resetPosition();
                 }
             },
@@ -356,11 +378,44 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
         }).start();
     };
 
-    const swipeRight = () => {
-        // Ensure filteredItems[currentIndex] exists before accessing id
-        if (filteredItems.length > currentIndex && filteredItems[currentIndex]) {
-            // Save item and continue
-            setSavedItems(prev => [...prev, filteredItems[currentIndex].id]);
+    // Update swipeRight to use the ref instead of state
+    const swipeRight = (fromSwipe = false) => {
+        let itemToSave = null;
+
+        // If called from swipe gesture, use the stored currentItem ref
+        if (fromSwipe && currentItemRef.current) {
+            itemToSave = currentItemRef.current;
+            console.log("Using stored item from swipe gesture:", itemToSave.id);
+        }
+        // Otherwise use the current index (this is for the heart button)
+        else if (filteredItems.length > currentIndex && filteredItems[currentIndex]) {
+            itemToSave = filteredItems[currentIndex];
+            console.log("Using item at current index:", itemToSave.id);
+        }
+
+        // Save the item if we have one
+        if (itemToSave) {
+            console.log("SAVING ITEM:", itemToSave.id, itemToSave.title);
+
+            try {
+                // Save item to the ProductContext
+                saveProduct(itemToSave.id);
+
+                // Save the item name for displaying in the notification
+                setSavedItemName(itemToSave.title);
+
+                // Show saved notification
+                setShowSavedNotification(true);
+
+                // Try to log the saved items after saving
+                setTimeout(() => {
+                    console.log("Checking if item was saved correctly...");
+                }, 500);
+            } catch (error) {
+                console.error("Error saving item:", error);
+            }
+        } else {
+            console.log("No item to save at index", currentIndex);
         }
 
         Animated.timing(position, {
@@ -369,8 +424,10 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
             useNativeDriver: true,
         }).start(() => {
             setShowGoodChoice(true);
-            // Remove the timeout that automatically closes the good choice screen
-            // The screen will now stay visible until user takes an action
+            // Auto-hide the saved notification after 3 seconds
+            setTimeout(() => {
+                setShowSavedNotification(false);
+            }, 3000);
         });
     };
 
@@ -1010,7 +1067,10 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                         </View>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary.main }]} onPress={swipeRight}>
+                    <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: colors.primary.main }]}
+                        onPress={() => swipeRight()}
+                    >
                         <Ionicons name="heart-outline" size={26} color={colors.neutral.white} />
                     </TouchableOpacity>
                 </View>
@@ -1038,6 +1098,14 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                 <Text style={[styles.goodChoiceSubtext, { color: colors.neutral.darkGray, fontSize: typography.fontSize.md }]}>
                     You've made a sustainable decision
                 </Text>
+
+                {/* Saved notification */}
+                <View style={styles.savedNotification}>
+                    <Ionicons name="checkmark-circle" size={24} color={colors.primary.main} style={{ marginRight: 8 }} />
+                    <Text style={[styles.savedNotificationText, { color: colors.primary.main }]}>
+                        Item saved to your collection!
+                    </Text>
+                </View>
 
                 <View style={styles.goodChoiceButtonsRow}>
                     <TouchableOpacity
@@ -1093,9 +1161,34 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                             entryAnim.setValue(0.9);
                         }}
                     >
-                        <Ionicons name="cart-outline" size={30} color={colors.primary.main} />
+                        <Ionicons name="bookmark-outline" size={30} color={colors.primary.main} />
                     </TouchableOpacity>
                 </View>
+
+                {/* View Saved Items Button */}
+                <TouchableOpacity
+                    style={[
+                        styles.viewSavedButton,
+                        {
+                            backgroundColor: colors.primary.main,
+                            marginTop: spacing.xl,
+                            paddingVertical: spacing.sm,
+                            paddingHorizontal: spacing.xl,
+                            borderRadius: borderRadius.md
+                        }
+                    ]}
+                    onPress={() => {
+                        navigation.navigate('Saved');
+                        setShowGoodChoice(false);
+                        setCurrentIndex(prevIndex => prevIndex + 1);
+                        position.setValue({ x: 0, y: 0 });
+                        entryAnim.setValue(0.9);
+                    }}
+                >
+                    <Text style={{ color: colors.neutral.white, fontWeight: 'bold' }}>
+                        View Saved Items
+                    </Text>
+                </TouchableOpacity>
             </View>
         );
     };
@@ -1150,6 +1243,24 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                         {showGoodChoice ? renderGoodChoiceScreen() : renderCard()}
                         {/* Render measurements overlay when activated */}
                         {renderMeasurementsOverlay()}
+
+                        {/* Saved notification popup */}
+                        {showSavedNotification && !showGoodChoice && (
+                            <Animated.View
+                                style={[
+                                    styles.floatingSavedNotification,
+                                    {
+                                        backgroundColor: colors.primary.light,
+                                        ...shadows.md
+                                    }
+                                ]}
+                            >
+                                <Ionicons name="heart" size={20} color={colors.primary.main} />
+                                <Text style={styles.floatingSavedText}>
+                                    Item saved to collection!
+                                </Text>
+                            </Animated.View>
+                        )}
                     </>
                 ) : (
                     <View style={styles.emptyStateContainer}>
@@ -1747,6 +1858,40 @@ const styles = StyleSheet.create({
     betaBadgeText: {
         fontSize: 10,
         fontWeight: 'bold',
+        color: 'white',
+    },
+    savedNotification: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(146, 200, 190, 0.2)',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 8,
+        marginBottom: 24,
+    },
+    savedNotificationText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    viewSavedButton: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 24,
+    },
+    floatingSavedNotification: {
+        position: 'absolute',
+        top: 20,
+        alignSelf: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        zIndex: 999,
+    },
+    floatingSavedText: {
+        marginLeft: 8,
+        fontWeight: '600',
         color: 'white',
     },
 });

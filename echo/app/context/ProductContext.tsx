@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import ProductService, { Product, ProductFilters } from '../services/ProductService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Context type definition
 interface ProductContextType {
@@ -8,6 +9,11 @@ interface ProductContextType {
     featuredProducts: Product[];
     loading: boolean;
     error: string | null;
+
+    // Saved items
+    savedItemIds: string[];
+    saveProduct: (id: string) => void;
+    unsaveProduct: (id: string) => void;
 
     // Methods
     fetchProducts: (filters?: ProductFilters) => Promise<void>;
@@ -32,6 +38,41 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [filters, setFilters] = useState<ProductFilters>({});
+    const [savedItemIds, setSavedItemIds] = useState<string[]>([]);
+
+    // Load saved items from AsyncStorage on mount
+    useEffect(() => {
+        const loadSavedItems = async () => {
+            try {
+                const storedItems = await AsyncStorage.getItem('savedItemIds');
+                if (storedItems) {
+                    const parsedItems = JSON.parse(storedItems);
+                    setSavedItemIds(parsedItems);
+                    console.log("Loaded saved items from storage:", parsedItems);
+                }
+            } catch (error) {
+                console.error("Error loading saved items from storage:", error);
+            }
+        };
+
+        loadSavedItems();
+    }, []);
+
+    // Save to AsyncStorage whenever savedItemIds changes
+    useEffect(() => {
+        const persistSavedItems = async () => {
+            try {
+                await AsyncStorage.setItem('savedItemIds', JSON.stringify(savedItemIds));
+                console.log("Saved items persisted to storage:", savedItemIds);
+            } catch (error) {
+                console.error("Error persisting saved items:", error);
+            }
+        };
+
+        if (savedItemIds.length > 0) {
+            persistSavedItems();
+        }
+    }, [savedItemIds]);
 
     // Fetch products with filters
     const fetchProducts = async (newFilters?: ProductFilters) => {
@@ -106,6 +147,38 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
         }
     };
 
+    // Save a product to saved items
+    const saveProduct = (id: string) => {
+        console.log("saveProduct called with id:", id);
+        if (!id) {
+            console.warn("Attempted to save item with invalid ID");
+            return;
+        }
+
+        setSavedItemIds(prev => {
+            if (!prev.includes(id)) {
+                console.log("Adding item to saved items:", id);
+                return [...prev, id];
+            }
+            return prev;
+        });
+    };
+
+    // Remove a product from saved items
+    const unsaveProduct = (id: string) => {
+        console.log("unsaveProduct called with id:", id);
+        if (!id) {
+            console.warn("Attempted to remove item with invalid ID");
+            return;
+        }
+
+        setSavedItemIds(prev => {
+            const newItems = prev.filter(itemId => itemId !== id);
+            console.log("New saved items after removal:", newItems);
+            return newItems;
+        });
+    };
+
     // Clear all filters
     const clearFilters = () => {
         setFilters({});
@@ -122,6 +195,9 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
         featuredProducts,
         loading,
         error,
+        savedItemIds,
+        saveProduct,
+        unsaveProduct,
         fetchProducts,
         getProductById,
         getProductsByCategory,

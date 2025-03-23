@@ -10,6 +10,7 @@ export interface Product {
     price: number;
     description: string;
     images: string[];
+    image_url?: string; // For compatibility with some components
     supabase_image_url?: string; // Add Supabase image URL field
     condition: string;
     brand?: string;
@@ -143,13 +144,13 @@ class ProductService {
     }
 
     // Get a single product by ID
-    async getProductDetails(id: string): Promise<Product | null> {
+    async getProductById(id: string): Promise<Product | null> {
         try {
             const { data, error } = await supabase
                 .from('products')
                 .select(`
                     *,
-                    product_images (*)
+                    product_images (url, position)
                 `)
                 .eq('id', id)
                 .single();
@@ -165,13 +166,13 @@ class ProductService {
 
             return this.transformProduct(data);
         } catch (error) {
-            console.error('Error in getProductDetails:', error);
+            console.error('Error in getProductById:', error);
             throw error;
         }
     }
 
-    // Get saved products for SavedItemsScreen
-    async getSavedProducts(savedIds: string[]): Promise<Product[]> {
+    // Get saved products by array of IDs
+    async getProductsByIds(savedIds: string[]): Promise<Product[]> {
         if (!savedIds || savedIds.length === 0) {
             return [];
         }
@@ -192,29 +193,19 @@ class ProductService {
 
             return this.transformProducts(data || []);
         } catch (error) {
-            console.error('Error in getSavedProducts:', error);
+            console.error('Error in getProductsByIds:', error);
             throw error;
         }
     }
 
+    // Get saved products for SavedItemsScreen (keeping for backward compatibility)
+    async getSavedProducts(savedIds: string[]): Promise<Product[]> {
+        return this.getProductsByIds(savedIds);
+    }
+
     // Get products by category with pagination for SearchScreen
-    async getProductsByCategory(category: string, page = 1, pageSize = 20): Promise<{ products: Product[], totalCount: number }> {
+    async getProductsByCategory(category: string, limit = 20): Promise<Product[]> {
         try {
-            // First get count for pagination
-            const { count, error: countError } = await supabase
-                .from('products')
-                .select('id', { count: 'exact' })
-                .eq('master_category', category);
-
-            if (countError) {
-                console.error('Error counting products by category:', countError);
-                throw new Error(countError.message);
-            }
-
-            // Calculate pagination
-            const from = (page - 1) * pageSize;
-            const to = from + pageSize - 1;
-
             // Get paginated data
             const { data, error } = await supabase
                 .from('products')
@@ -223,17 +214,14 @@ class ProductService {
                     product_images (url, position)
                 `)
                 .eq('master_category', category)
-                .range(from, to);
+                .limit(limit);
 
             if (error) {
                 console.error('Error fetching products by category:', error);
                 throw new Error(error.message);
             }
 
-            return {
-                products: this.transformProducts(data || []),
-                totalCount: count || 0
-            };
+            return this.transformProducts(data || []);
         } catch (error) {
             console.error('Error in getProductsByCategory:', error);
             throw error;
@@ -265,7 +253,7 @@ class ProductService {
         }
     }
 
-    // Get featured/recommended products
+    // Get featured products
     async getFeaturedProducts(limit = 10): Promise<Product[]> {
         try {
             const { data, error } = await supabase
@@ -274,7 +262,7 @@ class ProductService {
                     *,
                     product_images (url, position)
                 `)
-                .order('sustainability', { ascending: false })
+                .order('created_at', { ascending: false })
                 .limit(limit);
 
             if (error) {
@@ -289,140 +277,85 @@ class ProductService {
         }
     }
 
-    // Helper function to transform product data
     private transformProduct(product: any): Product {
-        if (!product) {
-            console.warn('Received null or undefined product in transformProduct');
-            return {
-                id: 'placeholder',
-                title: 'Product Not Available',
-                price: 0,
-                description: 'This product is currently unavailable',
-                images: [],
-                condition: 'unknown',
-                seller_id: '',
-                sustainability: 0,
-                sustainability_badges: [],
-                sustainability_info: {},
-                created_at: new Date(),
-                updated_at: new Date(),
-            };
+        // Process images properly
+        let images: string[] = [];
+
+        // Process images from product_images relationship
+        if (Array.isArray(product.product_images) && product.product_images.length > 0) {
+            images = product.product_images
+                .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
+                .map((img: any) => {
+                    if (!img.url) return '';
+
+                    // Support both full URLs and relative paths
+                    return img.url.startsWith('http')
+                        ? img.url
+                        : api.getUrl(img.url);
+                })
+                .filter(Boolean);
+        }
+        // Fallback to direct images array if available
+        else if (Array.isArray(product.images) && product.images.length > 0) {
+            images = product.images
+                .map((path: string) => {
+                    if (!path) return '';
+
+                    // Use direct URL if it's already a full URL
+                    return path.startsWith('http')
+                        ? path
+                        : api.getUrl(path);
+                })
+                .filter(Boolean);
         }
 
-        try {
-            // Log raw product data to debug
-            console.log('Raw product data:', JSON.stringify(product));
-
-            // Extract and sort images from product_images relation
-            let images: string[] = [];
-
-            // PRIORITY 1: Use Supabase image URL if available (highest quality)
-            if (product.supabase_image_url) {
-                console.log('Using Supabase image URL:', product.supabase_image_url);
-                images = [product.supabase_image_url];
-            }
-            // PRIORITY 2: Use product_images relation if available (from join)
-            else if (Array.isArray(product.product_images) && product.product_images.length > 0) {
-                console.log('Processing product_images array:', JSON.stringify(product.product_images));
-                images = product.product_images
-                    .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
-                    .map((img: any) => {
-                        if (!img.url) return '';
-
-                        // Support both Supabase and local paths
-                        if (img.url.startsWith('http')) {
-                            return img.url;
-                        }
-                        return api.getUrl(img.url);
-                    })
-                    .filter((url: string) => !!url);
-            }
-            // PRIORITY 3: Use direct images array
-            else if (Array.isArray(product.images) && product.images.length > 0) {
-                console.log('Using direct images array:', JSON.stringify(product.images));
-
-                // Map the image paths to full URLs
-                images = product.images
-                    .map((imgPath: string) => {
-                        if (!imgPath) return '';
-
-                        // Use URL directly if it's a full URL (Supabase or other)
-                        if (imgPath.startsWith('http')) {
-                            return imgPath;
-                        }
-
-                        // Otherwise use API URL
-                        return api.getUrl(imgPath);
-                    })
-                    .filter((url: string) => !!url);
-            }
-            // PRIORITY 4: Use single image string if available
-            else if (typeof product.image === 'string' && product.image) {
-                console.log('Using single image string:', product.image);
-                // If it's a full URL, use it directly
-                if (product.image.startsWith('http')) {
-                    images = [product.image];
-                } else {
-                    // Otherwise use API URL
-                    images = [api.getUrl(product.image)];
-                }
-            }
-
-            // FALLBACK: Use placeholder if no images found
-            if (images.length === 0) {
-                images = ['https://placehold.co/600x800/E0F7FA/2C3E50?text=No+Image'];
-            }
-
-            console.log('Final processed images:', JSON.stringify(images));
-
-            // Parse price safely
-            let price = 0;
-            try {
-                price = typeof product.price === 'number'
-                    ? product.price
-                    : parseFloat(product.price || '0');
-            } catch (e) {
-                console.warn('Error parsing product price:', e);
-            }
-
-            // Ensure required fields with defaults for safety
-            return {
-                ...product,
-                id: product.id || 'unknown',
-                title: product.title || 'Untitled Product',
-                price: isNaN(price) ? 0 : price,
-                description: product.description || '',
-                images,
-                condition: product.condition || 'unknown',
-                seller_id: product.seller_id || '',
-                sustainability: product.sustainability || 0,
-                sustainability_badges: Array.isArray(product.sustainability_badges)
-                    ? product.sustainability_badges
-                    : [],
-                sustainability_info: product.sustainability_info || {},
-                created_at: product.created_at ? new Date(product.created_at) : new Date(),
-                updated_at: product.updated_at ? new Date(product.updated_at) : new Date(),
-            };
-        } catch (error) {
-            console.error('Error transforming product:', error, product);
-            return {
-                id: product?.id || 'error',
-                title: 'Error Loading Product',
-                price: 0,
-                description: 'There was an error processing this product',
-                images: [],
-                condition: 'unknown',
-                seller_id: '',
-                sustainability: 0,
-                sustainability_badges: [],
-                sustainability_info: {},
-                created_at: new Date(),
-                updated_at: new Date(),
-            };
+        // Use Supabase image if available and no other images found
+        if (images.length === 0 && product.supabase_image_url) {
+            images = [product.supabase_image_url];
         }
+
+        // Set a fallback if still no images
+        if (images.length === 0) {
+            images = ['https://via.placeholder.com/200x200?text=No+Image'];
+        }
+
+        // Set image_url to first image for compatibility
+        const image_url = images[0];
+
+        // Transform from database model to our frontend Product interface
+        return {
+            id: product.id,
+            title: product.title,
+            price: parseFloat(product.price),
+            description: product.description,
+            images,
+            image_url,
+            supabase_image_url: product.supabase_image_url || null,
+            condition: product.condition,
+            brand: product.brand || undefined,
+            size: product.size || undefined,
+            material: product.material || undefined,
+            color: product.color || undefined,
+            seller_id: product.seller_id,
+            sellerName: product.seller_name || undefined,
+            sustainability: product.sustainability || 0,
+            sustainability_badges: product.sustainability_badges || [],
+            sustainability_info: product.sustainability_info || {},
+            created_at: new Date(product.created_at),
+            updated_at: new Date(product.updated_at),
+            // Other fields
+            gender: product.gender || undefined,
+            master_category: product.master_category || undefined,
+            sub_category: product.sub_category || undefined,
+            article_type: product.article_type || undefined,
+            base_colour: product.base_colour || undefined,
+            season: product.season || undefined,
+            year: product.year || undefined,
+            usage: product.usage || undefined,
+            product_display_name: product.product_display_name || undefined
+        };
     }
 
-    // Helper function to transform an array of products
     private transformProducts(products: any[]): Product[] {
         return products.map(product => this.transformProduct(product));
     }

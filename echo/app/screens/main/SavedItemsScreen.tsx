@@ -8,6 +8,8 @@ import {
     Image,
     Dimensions,
     ActivityIndicator,
+    Animated,
+    ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,11 +20,13 @@ import { useTheme } from '../../context/ThemeContext';
 import { MainStackParamList } from '../../navigation/AppNavigator';
 import ProductService, { Product } from '../../services/ProductService';
 import { useProducts } from '../../context/ProductContext';
+import Logo from '../../components/Logo';
+import { LinearGradient } from 'expo-linear-gradient';
 // import AsyncStorage from '@react-native-async-storage/async-storage'; // Uncomment to implement storage
 
-type SavedItemsScreenNavigationProp = StackNavigationProp<MainStackParamList>;
+const { width, height } = Dimensions.get('window');
 
-const { width } = Dimensions.get('window');
+type SavedItemsScreenNavigationProp = StackNavigationProp<MainStackParamList>;
 
 // Sample saved items for fallback only
 const FALLBACK_ITEMS = [
@@ -75,53 +79,56 @@ const SavedItemsScreen = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [retryCount, setRetryCount] = useState(0);
-
-    // Example saved IDs - in a real app, this would come from user preferences or state
-    // For a production app, you would store and retrieve this from AsyncStorage
-    const savedItemIds = ['1', '2', '3']; // Limit to small number for performance
+    const { savedItemIds, unsaveProduct } = useProducts();
+    const [fadeAnim] = useState(new Animated.Value(0));
+    const [slideAnim] = useState(new Animated.Value(50));
 
     // Fetch saved items from the database with error handling and retry
     useEffect(() => {
         const fetchSavedItems = async () => {
+            setLoading(true);
+            setError(null);
+
+            console.log("SavedItemsScreen: fetchSavedItems called");
+            console.log("SavedItemsScreen: Current savedItemIds:", savedItemIds);
+
             try {
-                setLoading(true);
-
-                // For production, this would use AsyncStorage to get the saved IDs
-                // const savedIds = await AsyncStorage.getItem('savedItemIds');
-                // const parsedIds = savedIds ? JSON.parse(savedIds) : [];
-
-                if (savedItemIds.length === 0) {
+                if (!savedItemIds || savedItemIds.length === 0) {
                     setSavedItems([]);
                     setLoading(false);
                     return;
                 }
 
-                // Limit the number of items to fetch
-                const itemsToFetch = savedItemIds.slice(0, 10); // Never fetch more than 10
+                // Fetch items with a delay to avoid overwhelming the server
+                const items = await Promise.all(
+                    savedItemIds.map((id, index) =>
+                        new Promise<Product | null>((resolve, reject) => {
+                            // Stagger requests slightly
+                            setTimeout(async () => {
+                                try {
+                                    const product = await ProductService.getProductById(id);
+                                    resolve(product);
+                                } catch (error) {
+                                    console.error(`Error fetching product with ID ${id}:`, error);
+                                    resolve(null); // Resolve with null instead of rejecting
+                                }
+                            }, index * 100); // 100ms delay between each request
+                        })
+                    )
+                );
 
-                const items = await ProductService.getSavedProducts(itemsToFetch);
-
-                if (items && items.length > 0) {
-                    setSavedItems(items);
-                    setError(null);
-                } else {
-                    // No items found, use fallback
-                    console.log('No saved items found, using fallback');
-                    setSavedItems(getFallbackProducts());
-                }
+                // Filter out any null results
+                const validItems = items.filter(item => item !== null) as Product[];
+                setSavedItems(validItems);
             } catch (err) {
-                console.error('Error fetching saved items:', err);
-                setError('Failed to load saved items');
+                console.error("Error fetching saved items:", err);
+                setError("Failed to load saved items");
 
-                // Only use fallback after retry attempts
-                if (retryCount >= 2) {
-                    setSavedItems(getFallbackProducts());
-                } else {
-                    // Implement exponential backoff for retries
-                    const retryDelay = Math.pow(2, retryCount) * 1000;
+                // If we've tried less than 3 times, retry after a delay
+                if (retryCount < 3) {
                     setTimeout(() => {
-                        setRetryCount(prev => prev + 1);
-                    }, retryDelay);
+                        setRetryCount(prevCount => prevCount + 1);
+                    }, 2000); // 2 second delay before retrying
                 }
             } finally {
                 setLoading(false);
@@ -129,122 +136,167 @@ const SavedItemsScreen = () => {
         };
 
         fetchSavedItems();
-    }, [retryCount]);
+    }, [savedItemIds, retryCount]);
 
-    // Handle item removal (for production app)
-    const handleRemoveItem = async (itemId: string) => {
-        // Optimistic UI update
-        setSavedItems(current => current.filter(item => item.id !== itemId));
+    // Animate items in on mount
+    useEffect(() => {
+        if (!loading) {
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 600,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(slideAnim, {
+                    toValue: 0,
+                    duration: 600,
+                    useNativeDriver: true,
+                })
+            ]).start();
+        }
+    }, [loading, fadeAnim, slideAnim]);
 
-        // For production, this would persist the change to AsyncStorage
-        // const newSavedIds = savedItemIds.filter(id => id !== itemId);
-        // await AsyncStorage.setItem('savedItemIds', JSON.stringify(newSavedIds));
-
-        // Show success message or handle errors
+    const handleRemoveItem = (itemId: string) => {
+        unsaveProduct(itemId);
     };
 
-    const renderSavedItem = ({ item }: { item: Product }) => {
-        // Get the first image or use a placeholder
-        const imageUri = item.images && item.images.length > 0
-            ? item.images[0]
-            : item.supabase_image_url || 'https://placehold.co/600x800/E0F7FA/2C3E50?text=No+Image';
+    const getRandomPlaceholderImage = (item: Product) => {
+        const imageUri = item.image_url ||
+            (item.images && item.images.length > 0 ? item.images[0] : null) ||
+            `https://source.unsplash.com/300x300/?fashion,clothing,${item.title?.replace(/\s+/g, ',')}`;
+
+        return imageUri;
+    };
+
+    const renderSavedItem = ({ item, index }: { item: Product, index: number }) => {
+        const imageUri = getRandomPlaceholderImage(item);
+
+        // Apply staggered animation to each item
+        const itemFadeAnim = new Animated.Value(0);
+        const itemSlideAnim = new Animated.Value(20);
+
+        Animated.parallel([
+            Animated.timing(itemFadeAnim, {
+                toValue: 1,
+                duration: 400,
+                delay: index * 100,
+                useNativeDriver: true,
+            }),
+            Animated.timing(itemSlideAnim, {
+                toValue: 0,
+                duration: 400,
+                delay: index * 100,
+                useNativeDriver: true,
+            })
+        ]).start();
 
         return (
-            <View
+            <Animated.View
                 style={[
-                    styles.savedItem,
                     {
-                        borderBottomColor: colors.neutral.lightGray,
-                        borderBottomWidth: 1,
-                        padding: spacing.md,
-                        backgroundColor: colors.neutral.white,
+                        opacity: itemFadeAnim,
+                        transform: [{ translateY: itemSlideAnim }],
+                        marginBottom: spacing.md,
                     }
                 ]}
             >
                 <TouchableOpacity
-                    style={styles.itemContent}
+                    style={[
+                        styles.savedItem,
+                        {
+                            backgroundColor: colors.neutral.white,
+                            borderRadius: borderRadius.lg,
+                            ...shadows.md,
+                            overflow: 'hidden'
+                        }
+                    ]}
                     onPress={() => navigation.navigate('ItemDetail', { itemId: item.id })}
+                    activeOpacity={0.9}
                 >
-                    <Image
-                        source={{ uri: imageUri }}
-                        style={[
-                            styles.itemImage,
-                            {
-                                borderRadius: borderRadius.md,
-                            }
-                        ]}
-                    />
+                    <View style={styles.imageContainer}>
+                        <Image
+                            source={{ uri: imageUri }}
+                            style={styles.itemImage}
+                            resizeMode="cover"
+                        />
+                        <LinearGradient
+                            colors={['transparent', 'rgba(0,0,0,0.5)']}
+                            style={styles.imageGradient}
+                        />
+                        <View style={styles.actionButtonsOverlay}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.actionButton,
+                                    {
+                                        backgroundColor: 'rgba(255,255,255,0.95)',
+                                    }
+                                ]}
+                                onPress={() => navigation.navigate('Chat', { sellerId: item.sellerName || item.seller_id })}
+                            >
+                                <Ionicons name="chatbubble" size={18} color={colors.primary.main} />
+                            </TouchableOpacity>
 
-                    <View style={[styles.itemInfo, { marginLeft: spacing.md }]}>
-                        <Text
-                            style={[
-                                styles.itemTitle,
-                                {
-                                    color: colors.neutral.charcoal,
-                                    fontSize: typography.fontSize.md,
-                                    marginBottom: spacing.xs,
-                                }
-                            ]}
-                            numberOfLines={1}
-                        >
-                            {item.title}
-                        </Text>
+                            <TouchableOpacity
+                                style={[
+                                    styles.actionButton,
+                                    {
+                                        backgroundColor: 'rgba(255,255,255,0.95)',
+                                    }
+                                ]}
+                                onPress={() => handleRemoveItem(item.id)}
+                            >
+                                <Ionicons name="heart" size={18} color={colors.semantic.error} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
 
-                        <Text
-                            style={[
-                                styles.sellerName,
-                                {
-                                    color: colors.neutral.darkGray,
-                                    fontSize: typography.fontSize.sm,
-                                    marginBottom: spacing.xs,
-                                }
-                            ]}
-                        >
-                            @{item.sellerName || 'seller'}
-                        </Text>
+                    <View style={[styles.itemContent, { padding: spacing.md }]}>
+                        <View style={styles.itemInfo}>
+                            <Text
+                                style={[
+                                    styles.itemTitle,
+                                    {
+                                        color: colors.neutral.charcoal,
+                                        fontSize: typography.fontSize.md,
+                                        fontWeight: 'bold',
+                                        marginBottom: spacing.xs,
+                                    }
+                                ]}
+                                numberOfLines={1}
+                            >
+                                {item.title}
+                            </Text>
 
-                        <Text
-                            style={[
-                                styles.itemPrice,
-                                {
-                                    color: colors.primary.dark,
-                                    fontSize: typography.fontSize.md,
-                                    fontWeight: 'bold',
-                                }
-                            ]}
-                        >
-                            ${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}
-                        </Text>
+                            <Text
+                                style={[
+                                    styles.sellerName,
+                                    {
+                                        color: colors.neutral.darkGray,
+                                        fontSize: typography.fontSize.sm,
+                                    }
+                                ]}
+                            >
+                                @{item.sellerName || item.seller_id || 'seller'}
+                            </Text>
+                        </View>
+
+                        <View style={styles.priceContainer}>
+                            <Text
+                                style={[
+                                    styles.itemPrice,
+                                    {
+                                        color: colors.primary.dark,
+                                        fontSize: typography.fontSize.lg,
+                                        fontWeight: 'bold',
+                                    }
+                                ]}
+                            >
+                                ${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}
+                            </Text>
+                        </View>
                     </View>
                 </TouchableOpacity>
-
-                <View style={styles.actionButtons}>
-                    <TouchableOpacity
-                        style={[
-                            styles.iconButton,
-                            {
-                                backgroundColor: colors.semantic.error + '20', // 20% opacity
-                                marginBottom: spacing.sm,
-                            }
-                        ]}
-                        onPress={() => navigation.navigate('Chat', { sellerId: item.sellerName || item.seller_id })}
-                    >
-                        <Ionicons name="chatbubble" size={20} color={colors.semantic.error} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={[
-                            styles.iconButton,
-                            {
-                                backgroundColor: colors.primary.main + '20', // 20% opacity
-                            }
-                        ]}
-                        onPress={() => handleRemoveItem(item.id)}
-                    >
-                        <Ionicons name="trash-outline" size={20} color={colors.primary.main} />
-                    </TouchableOpacity>
-                </View>
-            </View>
+            </Animated.View>
         );
     };
 
@@ -253,9 +305,21 @@ const SavedItemsScreen = () => {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.neutral.offWhite }]}>
                 <StatusBar style="dark" />
+                <View style={[styles.header, {
+                    backgroundColor: colors.neutral.white,
+                    ...shadows.sm,
+                }]}>
+                    <Logo size="large" />
+                </View>
                 <View style={[styles.loadingContainer, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}>
                     <ActivityIndicator size="large" color={colors.primary.main} />
-                    <Text style={{ marginTop: spacing.md, color: colors.neutral.darkGray }}>Loading saved items...</Text>
+                    <Text style={{
+                        marginTop: spacing.md,
+                        color: colors.neutral.darkGray,
+                        fontSize: typography.fontSize.md
+                    }}>
+                        Loading your treasures...
+                    </Text>
                 </View>
             </SafeAreaView>
         );
@@ -266,8 +330,20 @@ const SavedItemsScreen = () => {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.neutral.offWhite }]}>
                 <StatusBar style="dark" />
+                <View style={[styles.header, {
+                    backgroundColor: colors.neutral.white,
+                    ...shadows.sm,
+                }]}>
+                    <Logo size="large" />
+                    <View style={styles.headerIcons}>
+                        <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.navigate('Home')}>
+                            <Ionicons name="home-outline" size={24} color={colors.neutral.charcoal} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
                 <View style={[styles.errorContainer, { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl }]}>
-                    <Ionicons name="alert-circle-outline" size={60} color={colors.semantic.error} />
+                    <Ionicons name="cloud-offline-outline" size={80} color={colors.semantic.error} />
                     <Text style={[styles.errorTitle, {
                         color: colors.neutral.charcoal,
                         fontSize: typography.fontSize.lg,
@@ -275,7 +351,7 @@ const SavedItemsScreen = () => {
                         textAlign: 'center',
                         fontWeight: 'bold'
                     }]}>
-                        Could not load saved items
+                        Connection Error
                     </Text>
                     <Text style={[styles.errorMessage, {
                         color: colors.neutral.darkGray,
@@ -284,14 +360,15 @@ const SavedItemsScreen = () => {
                         marginTop: spacing.sm,
                         marginBottom: spacing.lg
                     }]}>
-                        There was a problem connecting to the server. Please try again later.
+                        We couldn't reach our servers. Please check your internet connection and try again.
                     </Text>
                     <TouchableOpacity
                         style={[styles.retryButton, {
                             backgroundColor: colors.primary.main,
                             paddingVertical: spacing.sm,
                             paddingHorizontal: spacing.lg,
-                            borderRadius: borderRadius.md
+                            borderRadius: borderRadius.md,
+                            ...shadows.sm,
                         }]}
                         onPress={() => setRetryCount(0)}
                     >
@@ -308,86 +385,162 @@ const SavedItemsScreen = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.neutral.offWhite }]}>
             <StatusBar style="dark" />
 
-            {/* Header */}
-            <View style={[
-                styles.header,
-                {
-                    backgroundColor: colors.neutral.white,
-                    ...shadows.sm,
-                    borderBottomLeftRadius: borderRadius.lg,
-                    borderBottomRightRadius: borderRadius.lg,
-                }
-            ]}>
-                <Text style={[styles.logo, { color: colors.neutral.charcoal }]}>LOGO</Text>
-
+            {/* Modern Gradient Header */}
+            <LinearGradient
+                colors={[colors.primary.main, colors.primary.light]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[
+                    styles.header,
+                    {
+                        ...shadows.md,
+                        borderBottomLeftRadius: borderRadius.lg,
+                        borderBottomRightRadius: borderRadius.lg,
+                    }
+                ]}
+            >
+                <Logo size="large" />
                 <View style={styles.headerIcons}>
-                    <TouchableOpacity style={styles.headerIconButton}>
-                        <Ionicons name="notifications" size={24} color={colors.neutral.charcoal} />
+                    <TouchableOpacity
+                        style={[styles.headerIconButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                        onPress={() => navigation.navigate('Home')}
+                    >
+                        <Ionicons name="home-outline" size={22} color={colors.neutral.white} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.headerIconButton}>
-                        <Ionicons name="settings" size={24} color={colors.neutral.charcoal} />
+                    <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                        <Ionicons name="notifications-outline" size={22} color={colors.neutral.white} />
                     </TouchableOpacity>
                 </View>
-            </View>
+            </LinearGradient>
 
-            <View style={[styles.titleContainer, { padding: spacing.md }]}>
+            <Animated.View
+                style={[
+                    styles.titleContainer,
+                    {
+                        paddingHorizontal: spacing.lg,
+                        paddingVertical: spacing.md,
+                        opacity: fadeAnim,
+                        transform: [{ translateY: slideAnim }]
+                    }
+                ]}
+            >
                 <Text style={[
                     styles.screenTitle,
-                    { color: colors.neutral.charcoal, fontSize: typography.fontSize.xl }
+                    {
+                        color: colors.neutral.charcoal,
+                        fontSize: typography.fontSize.xxl,
+                        fontWeight: 'bold',
+                        letterSpacing: typography.letterSpacing.wide
+                    }
                 ]}>
-                    Saved Items
+                    Your Favorites
                 </Text>
-            </View>
+                <Text style={[
+                    styles.screenSubtitle,
+                    {
+                        color: colors.neutral.darkGray,
+                        fontSize: typography.fontSize.md,
+                        marginTop: spacing.xs
+                    }
+                ]}>
+                    {savedItems.length} sustainable treasures saved
+                </Text>
+            </Animated.View>
 
             {savedItems.length > 0 ? (
                 <FlatList
                     data={savedItems}
                     renderItem={renderSavedItem}
-                    keyExtractor={(item, index) => `${item.id}-${index}`}
-                    contentContainerStyle={{ paddingBottom: 90 }}
-                    initialNumToRender={5} // Only render what's visible initially
-                    maxToRenderPerBatch={5} // Reduce batch size for better performance
-                    windowSize={5} // Reduce window size for better performance
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={{
+                        paddingHorizontal: spacing.lg,
+                        paddingBottom: 90
+                    }}
+                    showsVerticalScrollIndicator={false}
+                    initialNumToRender={5}
+                    maxToRenderPerBatch={5}
+                    windowSize={5}
                 />
             ) : (
-                <View style={[styles.emptyState, { paddingTop: spacing.xxxl }]}>
-                    <Ionicons name="heart" size={80} color={colors.neutral.lightGray} />
-                    <Text style={[
-                        styles.emptyStateTitle,
-                        {
-                            color: colors.neutral.darkGray,
-                            fontSize: typography.fontSize.lg,
-                            marginTop: spacing.lg,
-                        }
-                    ]}>
-                        No saved items yet
-                    </Text>
-                    <Text style={[
-                        styles.emptyStateSubtitle,
-                        {
-                            color: colors.neutral.mediumGray,
-                            fontSize: typography.fontSize.md,
-                            marginTop: spacing.sm,
-                            textAlign: 'center',
-                        }
-                    ]}>
-                        Items you like will appear here. Start browsing to find sustainable treasures!
-                    </Text>
-                    <TouchableOpacity
-                        style={[styles.browseButton, {
-                            backgroundColor: colors.primary.main,
-                            marginTop: spacing.xl,
-                            paddingVertical: spacing.sm,
-                            paddingHorizontal: spacing.lg,
-                            borderRadius: borderRadius.md
-                        }]}
-                        onPress={() => navigation.navigate('Home')}
+                <ScrollView
+                    contentContainerStyle={[
+                        styles.emptyStateContainer,
+                        { paddingTop: spacing.xxxl }
+                    ]}
+                    showsVerticalScrollIndicator={false}
+                >
+                    <Animated.View
+                        style={[
+                            styles.emptyStateContent,
+                            {
+                                opacity: fadeAnim,
+                                transform: [{ translateY: slideAnim }]
+                            }
+                        ]}
                     >
-                        <Text style={{ color: colors.neutral.white, fontWeight: 'bold' }}>
-                            Browse Items
+                        <View style={[
+                            styles.emptyStateIconContainer,
+                            {
+                                backgroundColor: colors.primary.light + '40',
+                                ...shadows.sm
+                            }
+                        ]}>
+                            <Ionicons name="heart" size={60} color={colors.primary.main} />
+                        </View>
+
+                        <Text style={[
+                            styles.emptyStateTitle,
+                            {
+                                color: colors.neutral.charcoal,
+                                fontSize: typography.fontSize.xl,
+                                marginTop: spacing.lg,
+                                fontWeight: 'bold',
+                            }
+                        ]}>
+                            No favorites yet
                         </Text>
-                    </TouchableOpacity>
-                </View>
+
+                        <Text style={[
+                            styles.emptyStateSubtitle,
+                            {
+                                color: colors.neutral.darkGray,
+                                fontSize: typography.fontSize.md,
+                                marginTop: spacing.sm,
+                                textAlign: 'center',
+                                lineHeight: typography.lineHeight.md,
+                                maxWidth: width * 0.8
+                            }
+                        ]}>
+                            Start saving sustainable treasures by tapping the heart icon on items you love
+                        </Text>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.browseButton,
+                                {
+                                    backgroundColor: colors.primary.main,
+                                    marginTop: spacing.xl,
+                                    paddingVertical: spacing.md,
+                                    paddingHorizontal: spacing.xl,
+                                    borderRadius: borderRadius.lg,
+                                    ...shadows.md
+                                }
+                            ]}
+                            onPress={() => navigation.navigate('Home')}
+                        >
+                            <Text style={[
+                                styles.browseButtonText,
+                                {
+                                    color: colors.neutral.white,
+                                    fontWeight: 'bold',
+                                    fontSize: typography.fontSize.md
+                                }
+                            ]}>
+                                Discover Items
+                            </Text>
+                        </TouchableOpacity>
+                    </Animated.View>
+                </ScrollView>
             )}
         </SafeAreaView>
     );
@@ -398,40 +551,69 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     header: {
-        padding: 16,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-    },
-    logo: {
-        fontSize: 24,
-        fontWeight: 'bold',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        marginBottom: 12,
     },
     headerIcons: {
         flexDirection: 'row',
     },
     headerIconButton: {
-        marginLeft: 16,
+        marginLeft: 12,
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 20,
     },
     titleContainer: {
-        marginBottom: 8,
+        marginBottom: 12,
     },
     screenTitle: {
         fontWeight: 'bold',
     },
-    savedItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+    screenSubtitle: {
+        opacity: 0.8,
     },
-    itemContent: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
+    savedItem: {
+        overflow: 'hidden',
+    },
+    imageContainer: {
+        height: 180,
+        position: 'relative',
     },
     itemImage: {
-        width: 80,
-        height: 80,
+        width: '100%',
+        height: '100%',
+    },
+    imageGradient: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 60,
+    },
+    actionButtonsOverlay: {
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        flexDirection: 'column',
+    },
+    actionButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    itemContent: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     itemInfo: {
         flex: 1,
@@ -440,31 +622,44 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     sellerName: {
-        fontWeight: '400',
+        opacity: 0.7,
+    },
+    priceContainer: {
+        paddingLeft: 10,
     },
     itemPrice: {
-        marginTop: 'auto',
+        fontWeight: 'bold',
     },
-    actionButtons: {
+    emptyStateContainer: {
+        flexGrow: 1,
         alignItems: 'center',
+        justifyContent: 'center',
     },
-    iconButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+    emptyStateContent: {
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    emptyStateIconContainer: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    emptyState: {
-        flex: 1,
-        alignItems: 'center',
-        paddingHorizontal: 40,
-    },
     emptyStateTitle: {
         fontWeight: 'bold',
+        textAlign: 'center',
     },
     emptyStateSubtitle: {
-        lineHeight: 22,
+        textAlign: 'center',
+        marginHorizontal: 20,
+    },
+    browseButton: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    browseButtonText: {
+        fontWeight: 'bold',
     },
     loadingContainer: {
         padding: 20,
@@ -481,10 +676,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     retryButton: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    browseButton: {
         alignItems: 'center',
         justifyContent: 'center',
     },

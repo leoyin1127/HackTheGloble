@@ -243,7 +243,6 @@ const DiscoverStackNavigator = () => {
 const MessagesStackNavigator = () => {
     return (
         <MainStack.Navigator screenOptions={{ headerShown: false }}>
-            <MainStack.Screen name="AIChat" component={AIChatScreen} />
             <MainStack.Screen name="ChatList" component={ChatListScreen} />
         </MainStack.Navigator>
     );
@@ -290,7 +289,33 @@ const MainNavigator = () => (
         <MainStack.Screen name="ItemDetail" component={ItemDetailScreen} options={{ headerShown: false }} />
         <MainStack.Screen name="Checkout" component={CheckoutScreen} options={{ headerShown: false }} />
         <MainStack.Screen name="Chat" component={ChatScreen} options={{ headerShown: false }} />
-        <MainStack.Screen name="AIChat" component={AIChatScreen} options={{ headerShown: false }} />
+        <MainStack.Screen
+            name="AIChat"
+            component={AIChatScreen}
+            options={{
+                headerShown: false,
+                presentation: 'transparentModal',
+                detachPreviousScreen: true,
+                cardStyle: {
+                    backgroundColor: 'transparent',
+                },
+                cardOverlayEnabled: true,
+                animationEnabled: true,
+                gestureEnabled: true,
+                gestureResponseDistance: 800,
+                cardStyleInterpolator: ({ current: { progress } }) => ({
+                    cardStyle: {
+                        opacity: progress,
+                    },
+                    overlayStyle: {
+                        opacity: progress.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 0.8],
+                        }),
+                    },
+                }),
+            }}
+        />
     </MainStack.Navigator>
 );
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -71,6 +71,33 @@ const ChatListScreen = () => {
     const scaleAnim = useState(new Animated.Value(0.95))[0];
     const slideAnim = useState(new Animated.Value(20))[0];
 
+    // Add pulsing animation for AI avatar
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    // Setup pulsing animation
+    useEffect(() => {
+        const pulseAnimation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, {
+                    toValue: 1.15,
+                    duration: 1000,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(pulseAnim, {
+                    toValue: 1,
+                    duration: 1000,
+                    useNativeDriver: true,
+                }),
+            ])
+        );
+
+        pulseAnimation.start();
+
+        return () => {
+            pulseAnimation.stop();
+        };
+    }, []);
+
     // Animation effect when screen loads - update to handle all items with staggered timing
     useEffect(() => {
         Animated.parallel([
@@ -123,6 +150,144 @@ const ChatListScreen = () => {
         chat.sellerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    // Create a proper method to navigate to AI Chat as a modal
+    const navigateToAIChat = () => {
+        // First navigate back to the root tab if needed
+        navigation.navigate('TabHome');
+        // Then navigate to AIChat as a modal
+        navigation.navigate('AIChat');
+    };
+
+    const renderAIChatEntry = () => {
+        // Create a shimmer animation
+        const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+        useEffect(() => {
+            Animated.loop(
+                Animated.timing(shimmerAnim, {
+                    toValue: 1,
+                    duration: 2000,
+                    useNativeDriver: true,
+                })
+            ).start();
+        }, []);
+
+        const shimmerTranslate = shimmerAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [-100, 200],
+        });
+
+        return (
+            <Animated.View
+                style={[
+                    {
+                        paddingHorizontal: 0,
+                        marginBottom: spacing.lg,
+                        marginTop: spacing.md,
+                    },
+                    getItemAnimationStyle(0),
+                ]}
+            >
+                <LinearGradient
+                    colors={[colors.primary.dark, colors.primary.main]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[
+                        styles.aiChatItem,
+                        {
+                            padding: 0,
+                            borderRadius: borderRadius.xxl,
+                            marginHorizontal: 0,
+                            overflow: 'hidden',
+                            ...shadows.lg
+                        }
+                    ]}
+                >
+                    {/* Shimmer effect */}
+                    <Animated.View
+                        style={[
+                            styles.shimmerEffect,
+                            {
+                                transform: [{ translateX: shimmerTranslate }],
+                            }
+                        ]}
+                    />
+
+                    <TouchableOpacity
+                        style={styles.aiChatButton}
+                        activeOpacity={0.8}
+                        onPress={navigateToAIChat}
+                    >
+                        {/* Decorative circles */}
+                        <View style={styles.decorativeCircle1} />
+                        <View style={styles.decorativeCircle2} />
+
+                        <View style={styles.aiContentWrapper}>
+                            <View style={styles.aiHeaderRow}>
+                                <View style={styles.aiAvatarOuterContainer}>
+                                    <Animated.View style={{
+                                        transform: [{ scale: pulseAnim }],
+                                    }}>
+                                        <LinearGradient
+                                            colors={['#ffffff', '#f0f0f0']}
+                                            style={styles.aiAvatarGradient}
+                                        >
+                                            <LinearGradient
+                                                colors={[colors.primary.light, colors.primary.main]}
+                                                style={styles.aiAvatarInner}
+                                            >
+                                                <Ionicons name="star" size={26} color="white" />
+                                            </LinearGradient>
+                                        </LinearGradient>
+                                    </Animated.View>
+                                </View>
+
+                                <View style={styles.aiTitleContainer}>
+                                    <Text style={styles.aiTitle}>
+                                        Echo
+                                    </Text>
+                                    <View style={styles.aiSubtitleRow}>
+                                        <Text style={styles.aiSubtitle}>Your Personal Stylist</Text>
+                                        <View style={styles.aiBadge}>
+                                            <Text style={styles.aiBadgeText}>AI</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            </View>
+
+                            <View style={styles.aiBodyContent}>
+                                <Text style={styles.aiDescription}>
+                                    Get personalized sustainable fashion recommendations and discover your unique eco-style
+                                </Text>
+
+                                <View style={styles.aiFeatures}>
+                                    {[
+                                        'Style Advice', 'Eco Tips', 'Outfit Ideas'
+                                    ].map((feature, idx) => (
+                                        <View key={idx} style={styles.aiFeatureTag}>
+                                            <Text style={styles.aiFeatureText}>{feature}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+
+                            <View style={styles.aiFooter}>
+                                <View style={styles.newBadge}>
+                                    <Text style={styles.newBadgeText}>NEW</Text>
+                                </View>
+
+                                <View style={styles.chatNowButton}>
+                                    <Text style={styles.chatNowText}>Chat Now</Text>
+                                    <Ionicons name="arrow-forward" size={16} color="white" />
+                                </View>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                </LinearGradient>
+            </Animated.View>
+        );
+    };
 
     const renderChatItem = ({ item, index }: { item: typeof CHATS[0], index: number }) => {
         return (
@@ -462,7 +627,10 @@ const ChatListScreen = () => {
                 showsVerticalScrollIndicator={false}
                 ListEmptyComponent={renderEmptyState}
                 ListHeaderComponent={
-                    <View style={{ height: spacing.sm }} />
+                    <>
+                        {renderAIChatEntry()}
+                        <View style={{ height: spacing.sm }} />
+                    </>
                 }
             />
         </SafeAreaView>
@@ -560,6 +728,212 @@ const styles = StyleSheet.create({
     emptyText: {},
     startButton: {},
     startButtonText: {},
+    aiChatItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    aiAvatarGradient: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 3,
+        borderColor: 'white',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 4,
+    },
+    aiAvatarInner: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    aiContentWrapper: {
+        width: '100%',
+        padding: 20,
+    },
+    aiHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 14,
+    },
+    aiTitleContainer: {
+        flexDirection: 'column',
+    },
+    aiTitle: {
+        fontSize: 26,
+        fontWeight: 'bold',
+        color: 'white',
+        letterSpacing: 0.5,
+        marginBottom: 2,
+        textShadowColor: 'rgba(0, 0, 0, 0.15)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+    },
+    aiSubtitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    aiSubtitle: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: 'rgba(255, 255, 255, 0.9)',
+        marginRight: 6,
+    },
+    aiBadge: {
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    aiBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: 'white',
+    },
+    aiBodyContent: {
+        marginVertical: 12,
+    },
+    aiDescription: {
+        fontSize: 15,
+        lineHeight: 22,
+        fontWeight: '400',
+        color: 'rgba(255, 255, 255, 0.95)',
+        marginBottom: 12,
+    },
+    aiFeatures: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginTop: 8,
+    },
+    aiFeatureTag: {
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        marginRight: 8,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        shadowColor: 'rgba(0, 0, 0, 0.1)',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.8,
+        shadowRadius: 1,
+        elevation: 1,
+    },
+    aiFeatureText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: 'white',
+    },
+    aiFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: 8,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    },
+    newBadge: {
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    newBadgeText: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: 'white',
+    },
+    chatNowButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 18,
+        shadowColor: 'rgba(0, 0, 0, 0.1)',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.8,
+        shadowRadius: 1,
+        elevation: 1,
+    },
+    chatNowText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: 'white',
+        marginRight: 6,
+    },
+    decorativeCircle1: {
+        position: 'absolute',
+        top: -30,
+        left: -30,
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    decorativeCircle2: {
+        position: 'absolute',
+        bottom: -40,
+        right: -20,
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    },
+    aiAvatarOuterContainer: {
+        position: 'relative',
+        marginRight: 12,
+    },
+    aiRibbon: {
+        position: 'absolute',
+        top: -10,
+        right: -10,
+        padding: 4,
+        paddingHorizontal: 8,
+        borderRadius: 4,
+        borderWidth: 2,
+        borderColor: 'white',
+        zIndex: 10,
+    },
+    aiRibbonText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: 'white',
+    },
+    aiChatArrow: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 12,
+    },
+    aiContentContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    aiChatButton: {
+        width: '100%',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+    },
+    shimmerEffect: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: 80,
+        height: '200%',
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        transform: [{ rotate: '25deg' }],
+    },
 });
 
 export default ChatListScreen; 

@@ -47,7 +47,7 @@ const ItemDetailScreen = () => {
                 setLoading(true);
 
                 // Get product details
-                const productData = await ProductService.getProductDetails(itemId);
+                const productData = await ProductService.getProductById(itemId);
 
                 if (!productData) {
                     setError('Product not found');
@@ -319,12 +319,12 @@ const ItemDetailScreen = () => {
                         </View>
                         <View style={styles.certificationsContainer}>
                             {product.sustainability_info && product.sustainability_info.certifications ?
-                                product.sustainability_info.certifications.map((cert, index) => (
+                                product.sustainability_info.certifications.map((cert: string, index: number) => (
                                     <View key={index} style={styles.certificationTag}>
                                         <Text style={styles.certificationText}>{cert}</Text>
                                     </View>
                                 ))
-                                : product.sustainability_badges && product.sustainability_badges.map((badge, index) => (
+                                : product.sustainability_badges && product.sustainability_badges.map((badge: string, index: number) => (
                                     <View key={index} style={styles.certificationTag}>
                                         <Text style={styles.certificationText}>{badge}</Text>
                                     </View>
