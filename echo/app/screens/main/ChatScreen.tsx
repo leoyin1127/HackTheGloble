@@ -14,6 +14,7 @@ import {
     SectionListData,
     Pressable,
     ScrollView,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ import { BlurView } from 'expo-blur';
 import { useTheme } from '../../context/ThemeContext';
 import PlaceholderImage from '../../components/PlaceholderImage';
 import { MainStackParamList } from '../../navigation/AppNavigator';
+import ProductService, { Product } from '../../services/ProductService';
 
 type ChatScreenRouteProp = RouteProp<MainStackParamList, 'Chat'>;
 type ChatScreenNavigationProp = StackNavigationProp<MainStackParamList>;
@@ -154,17 +156,27 @@ const ChatScreen = () => {
     const navigation = useNavigation<ChatScreenNavigationProp>();
     const { colors, spacing, typography, borderRadius, shadows, animation } = useTheme();
 
-    // Get sellerId from route params and convert to keyof SELLERS or undefined
-    const paramSellerId = route.params?.sellerId;
+    // Extract params from route
+    const { sellerId: routeSellerId, itemId } = route.params;
 
-    // Find seller or use a default if not found
-    let sellerId: SellerId;
-    // Try to match the param with a key in SELLERS, or use the first key
-    if (paramSellerId && paramSellerId in SELLERS) {
-        sellerId = paramSellerId as SellerId;
-    } else {
-        sellerId = Object.keys(SELLERS)[0] as SellerId;
-    }
+    // Add state for the product if itemId is provided
+    const [product, setProduct] = useState<Product | null>(null);
+    const [productLoading, setProductLoading] = useState(!!itemId);
+
+    // Convert seller ID from route params to a valid seller ID for the SELLERS object
+    // or use a default seller if not found
+    const [sellerId, setSellerId] = useState<keyof typeof SELLERS>('ameliegong');
+
+    // Update sellerId when route param changes
+    useEffect(() => {
+        if (routeSellerId && Object.keys(SELLERS).includes(routeSellerId)) {
+            setSellerId(routeSellerId as keyof typeof SELLERS);
+        } else if (routeSellerId) {
+            // If sellerId is provided but not in SELLERS, default to first one
+            setSellerId('ameliegong');
+            console.log(`Seller ${routeSellerId} not found, using default`);
+        }
+    }, [routeSellerId]);
 
     const seller = SELLERS[sellerId];
 
@@ -189,6 +201,25 @@ const ChatScreen = () => {
         'How soon can you ship?',
         'Do you have more photos?',
     ];
+
+    // Fetch product if itemId is provided
+    useEffect(() => {
+        const fetchProduct = async () => {
+            if (!itemId) return;
+
+            try {
+                setProductLoading(true);
+                const productData = await ProductService.getProductById(itemId);
+                setProduct(productData);
+            } catch (error) {
+                console.error('Error fetching product for chat:', error);
+            } finally {
+                setProductLoading(false);
+            }
+        };
+
+        fetchProduct();
+    }, [itemId]);
 
     useEffect(() => {
         // Animate messages appearing
@@ -937,6 +968,69 @@ const ChatScreen = () => {
         }, 2000);
     };
 
+    // Render the saved item card
+    const renderSavedItem = () => {
+        if (!product && !productLoading) return null;
+
+        return (
+            <View style={[
+                styles.savedItemContainer,
+                {
+                    backgroundColor: colors.neutral.white,
+                    borderRadius: borderRadius.lg,
+                    marginBottom: spacing.md,
+                    ...shadows.sm
+                }
+            ]}>
+                {productLoading ? (
+                    <View style={[styles.loadingContainer, { padding: spacing.md }]}>
+                        <ActivityIndicator size="small" color={colors.primary.main} />
+                        <Text style={{ color: colors.neutral.darkGray, marginTop: spacing.xs }}>
+                            Loading item...
+                        </Text>
+                    </View>
+                ) : (
+                    <TouchableOpacity
+                        style={styles.savedItemContent}
+                        onPress={() => navigation.navigate('ItemDetail', { itemId: product!.id })}
+                        activeOpacity={0.7}
+                    >
+                        <PlaceholderImage
+                            type="product"
+                            width={60}
+                            height={60}
+                            borderRadius={borderRadius.md}
+                            text={product?.title}
+                        />
+                        <View style={[styles.savedItemInfo, { marginLeft: spacing.md }]}>
+                            <Text
+                                style={{
+                                    color: colors.neutral.charcoal,
+                                    fontSize: typography.fontSize.md,
+                                    fontWeight: 'bold',
+                                    marginBottom: spacing.xs
+                                }}
+                                numberOfLines={1}
+                            >
+                                {product?.title}
+                            </Text>
+                            <Text
+                                style={{
+                                    color: colors.primary.main,
+                                    fontSize: typography.fontSize.md,
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                ${typeof product?.price === 'number' ? product?.price.toFixed(2) : product?.price}
+                            </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={colors.neutral.darkGray} />
+                    </TouchableOpacity>
+                )}
+            </View>
+        );
+    };
+
     return (
         <SafeAreaView
             style={[
@@ -978,7 +1072,10 @@ const ChatScreen = () => {
                     showsVerticalScrollIndicator={false}
                     ListFooterComponent={renderTypingIndicator}
                     ListHeaderComponent={
-                        <View style={{ height: spacing.sm }} />
+                        <>
+                            {renderSavedItem()}
+                            <View style={{ height: spacing.sm }} />
+                        </>
                     }
                 />
 
@@ -1187,6 +1284,23 @@ const styles = StyleSheet.create({
         height: 20,
     },
     typingDot: {},
+    savedItemContainer: {
+        marginHorizontal: 16,
+        overflow: 'hidden'
+    },
+    savedItemContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+    },
+    savedItemInfo: {
+        flex: 1,
+    },
+    loadingContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+    },
 });
 
 export default ChatScreen; 

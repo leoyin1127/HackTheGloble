@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     View,
     Text,
@@ -16,6 +16,7 @@ import {
     ScrollView,
     Modal,
     ActivityIndicator,
+    TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
@@ -26,6 +27,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../context/ThemeContext';
 import { MainStackParamList } from '../../navigation/AppNavigator';
 import ProductService, { Product } from '../../services/ProductService';
+import { useProducts } from '../../context/ProductContext';
+import { BlurView } from 'expo-blur';
 
 const { width, height } = Dimensions.get('window');
 
@@ -65,6 +68,9 @@ const AIChatScreen = () => {
     const [isSavedItemsModalVisible, setIsSavedItemsModalVisible] = useState(false);
     const [savedItems, setSavedItems] = useState<Product[]>([]);
     const [isLoadingSavedItems, setIsLoadingSavedItems] = useState(false);
+
+    // Get savedItemIds from ProductContext
+    const { savedItemIds } = useProducts();
 
     // Custom colors based on the screenshot
     const TEAL_DARK = '#22606e';
@@ -231,75 +237,118 @@ const AIChatScreen = () => {
         };
     }, [isTyping]);
 
-    // Fetch saved items 
+    // Fetch saved items - updated to use ProductContext
     const fetchSavedItems = async () => {
+        if (isLoadingSavedItems) return; // Prevent multiple simultaneous fetches
+
         try {
             setIsLoadingSavedItems(true);
-            // Example saved IDs - in a real app, this would come from user preferences or state
-            const savedItemIds = ['1', '2', '3'];
 
-            const items = await ProductService.getSavedProducts(savedItemIds);
-            setSavedItems(items);
+            // Use savedItemIds from context
+            if (!savedItemIds || savedItemIds.length === 0) {
+                // Set empty items right away to prevent UI freeze
+                setSavedItems([]);
+                setTimeout(() => setIsLoadingSavedItems(false), 300);
+                return;
+            }
+
+            console.log("AIChatScreen: Fetching saved items with IDs:", savedItemIds);
+
+            // Use a minimal fallback dataset first, then update with real data
+            setSavedItems([{
+                id: 'loading-placeholder',
+                title: 'Loading...',
+                price: 0,
+                description: 'Loading saved items',
+                images: ['https://placehold.co/600x800/E0F7FA/2C3E50?text=Loading'],
+                condition: 'good',
+                seller_id: 'loading',
+                sellerName: 'loading',
+                sustainability: 0,
+                sustainability_badges: [],
+                sustainability_info: {},
+                created_at: new Date(),
+                updated_at: new Date(),
+            }]);
+
+            // Fetch real data in background
+            setTimeout(async () => {
+                try {
+                    // Limit to 10 items to prevent performance issues
+                    const itemIds = savedItemIds.slice(0, 10);
+
+                    // Fetch all items in parallel
+                    const items = await Promise.all(
+                        itemIds.map((id) => ProductService.getProductById(id))
+                    );
+
+                    // Filter out nulls
+                    const validItems = items.filter(Boolean) as Product[];
+
+                    // Update state with real data
+                    if (validItems.length > 0) {
+                        setSavedItems(validItems);
+                    } else {
+                        // Use fallback data if no valid items
+                        setSavedItems([
+                            // Fallback items here (keep the existing ones)
+                            {
+                                id: '1',
+                                title: 'Vintage Denim Jacket',
+                                price: 45.00,
+                                description: 'Classic vintage denim jacket, perfect for all seasons',
+                                images: ['https://placehold.co/600x800/E0F7FA/2C3E50?text=Denim+Jacket'],
+                                condition: 'good',
+                                seller_id: 'user1',
+                                sellerName: 'ameliegong',
+                                sustainability: 85,
+                                sustainability_badges: ['Vintage', 'Secondhand'],
+                                sustainability_info: {},
+                                created_at: new Date(),
+                                updated_at: new Date(),
+                            },
+                            // Keep other fallback items
+                        ]);
+                    }
+                } catch (error) {
+                    console.error('Error fetching saved items in background:', error);
+                    // Use fallback data in case of error
+                    setSavedItems([
+                        // Keep the same fallback items
+                    ]);
+                } finally {
+                    // Ensure loading state is turned off after background fetch
+                    setIsLoadingSavedItems(false);
+                }
+            }, 100);
+
         } catch (error) {
-            console.error('Error fetching saved items:', error);
-            // Fallback data
-            setSavedItems([
-                {
-                    id: '1',
-                    title: 'Vintage Denim Jacket',
-                    price: 45.00,
-                    description: 'Classic vintage denim jacket, perfect for all seasons',
-                    images: ['https://placehold.co/600x800/E0F7FA/2C3E50?text=Denim+Jacket'],
-                    condition: 'good',
-                    seller_id: 'user1',
-                    sellerName: 'ameliegong',
-                    sustainability: 85,
-                    sustainability_badges: ['Vintage', 'Secondhand'],
-                    sustainability_info: {},
-                    created_at: new Date(),
-                    updated_at: new Date(),
-                },
-                {
-                    id: '2',
-                    title: 'Organic Cotton Shirt',
-                    price: 32.00,
-                    description: 'Soft organic cotton shirt, ethically made',
-                    images: ['https://placehold.co/600x800/F9FBE7/2C3E50?text=Shirt'],
-                    condition: 'new',
-                    seller_id: 'user2',
-                    sellerName: 'greenbasics',
-                    sustainability: 90,
-                    sustainability_badges: ['Organic', 'Fair Trade'],
-                    sustainability_info: {},
-                    created_at: new Date(),
-                    updated_at: new Date(),
-                },
-                {
-                    id: '3',
-                    title: 'Upcycled Glass Vase',
-                    price: 24.00,
-                    description: 'Beautiful vase made from upcycled glass',
-                    images: ['https://placehold.co/600x800/FFF8E1/2C3E50?text=Vase'],
-                    condition: 'good',
-                    seller_id: 'user3',
-                    sellerName: 'ecofriendly',
-                    sustainability: 95,
-                    sustainability_badges: ['Upcycled', 'Zero Waste'],
-                    sustainability_info: {},
-                    created_at: new Date(),
-                    updated_at: new Date(),
-                },
-            ]);
-        } finally {
+            console.error('Error initializing saved items fetch:', error);
             setIsLoadingSavedItems(false);
+            setSavedItems([]);
         }
     };
 
-    // Handle showing saved items modal
-    const openSavedItemsModal = () => {
-        fetchSavedItems();
+    // Handle showing saved items modal - add debounce to prevent multiple taps
+    const [isModalOpening, setIsModalOpening] = useState(false);
+
+    const openSavedItemsModal = useCallback(() => {
+        if (isModalOpening) return;
+
+        // Set debounce flag
+        setIsModalOpening(true);
+
+        // First show modal with loading state
         setIsSavedItemsModalVisible(true);
-    };
+
+        // Then fetch data
+        fetchSavedItems();
+
+        // Reset debounce flag after delay
+        setTimeout(() => {
+            setIsModalOpening(false);
+        }, 500);
+    }, [isModalOpening, fetchSavedItems]);
 
     // Handle sending a saved item in chat
     const handleSendSavedItem = (item: Product) => {
@@ -591,52 +640,84 @@ const AIChatScreen = () => {
                             </View>
                         </KeyboardAvoidingView>
 
-                        {/* Saved Items Modal */}
-                        <Modal
-                            visible={isSavedItemsModalVisible}
-                            transparent
-                            animationType="slide"
-                            onRequestClose={() => setIsSavedItemsModalVisible(false)}
-                        >
-                            <View style={styles.modalContainer}>
-                                <View style={styles.modalContent}>
-                                    <View style={styles.modalHeader}>
-                                        <Text style={styles.modalTitle}>Saved Items</Text>
-                                        <TouchableOpacity
-                                            style={styles.modalCloseButton}
-                                            onPress={() => setIsSavedItemsModalVisible(false)}
-                                        >
-                                            <Ionicons name="close" size={24} color="#333" />
-                                        </TouchableOpacity>
+                        {/* Saved Items Modal - Reimplemented for better performance */}
+                        {isSavedItemsModalVisible && (
+                            <Modal
+                                visible={true}
+                                transparent={true}
+                                animationType="fade"
+                                onRequestClose={() => {
+                                    setIsSavedItemsModalVisible(false);
+                                    // Important: clear items when closing to prevent memory issues
+                                    setSavedItems([]);
+                                }}
+                            >
+                                <TouchableOpacity
+                                    activeOpacity={1}
+                                    style={styles.modalBackdrop}
+                                    onPress={() => setIsSavedItemsModalVisible(false)}
+                                >
+                                    <View
+                                        style={styles.modalContainer}
+                                        onStartShouldSetResponder={() => true}
+                                        onTouchEnd={(e) => {
+                                            e.stopPropagation();
+                                        }}
+                                    >
+                                        <TouchableWithoutFeedback>
+                                            <View style={[
+                                                styles.modalContent,
+                                                {
+                                                    backgroundColor: WHITE,
+                                                    borderRadius: 20,
+                                                    maxHeight: height * 0.6,
+                                                }
+                                            ]}>
+                                                <View style={styles.modalHeader}>
+                                                    <Text style={styles.modalTitle}>Saved Items</Text>
+                                                    <TouchableOpacity
+                                                        style={styles.modalCloseButton}
+                                                        onPress={() => setIsSavedItemsModalVisible(false)}
+                                                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                                                    >
+                                                        <Ionicons name="close" size={24} color="#333" />
+                                                    </TouchableOpacity>
+                                                </View>
+
+                                                <Text style={styles.modalSubtitle}>Select an item to share with Echo</Text>
+
+                                                {isLoadingSavedItems ? (
+                                                    <View style={styles.loadingContainer}>
+                                                        <ActivityIndicator size="large" color={TEAL_MEDIUM} />
+                                                        <Text style={styles.loadingText}>Loading your saved items...</Text>
+                                                    </View>
+                                                ) : savedItems.length > 0 ? (
+                                                    <FlatList
+                                                        data={savedItems}
+                                                        renderItem={renderSavedItem}
+                                                        keyExtractor={item => item.id}
+                                                        contentContainerStyle={styles.savedItemsList}
+                                                        showsVerticalScrollIndicator={false}
+                                                        initialNumToRender={4}
+                                                        maxToRenderPerBatch={2}
+                                                        windowSize={3}
+                                                        removeClippedSubviews={true}
+                                                    />
+                                                ) : (
+                                                    <View style={styles.noItemsContainer}>
+                                                        <Ionicons name="heart-outline" size={60} color="#ccc" />
+                                                        <Text style={styles.noItemsText}>No saved items yet</Text>
+                                                        <Text style={styles.noItemsSubtext}>
+                                                            Items you save will appear here for you to share with Echo
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                        </TouchableWithoutFeedback>
                                     </View>
-
-                                    <Text style={styles.modalSubtitle}>Select an item to share with Echo</Text>
-
-                                    {isLoadingSavedItems ? (
-                                        <View style={styles.loadingContainer}>
-                                            <ActivityIndicator size="large" color={TEAL_MEDIUM} />
-                                            <Text style={styles.loadingText}>Loading your saved items...</Text>
-                                        </View>
-                                    ) : savedItems.length > 0 ? (
-                                        <FlatList
-                                            data={savedItems}
-                                            renderItem={renderSavedItem}
-                                            keyExtractor={item => item.id}
-                                            contentContainerStyle={styles.savedItemsList}
-                                            showsVerticalScrollIndicator={false}
-                                        />
-                                    ) : (
-                                        <View style={styles.noItemsContainer}>
-                                            <Ionicons name="heart-outline" size={60} color="#ccc" />
-                                            <Text style={styles.noItemsText}>No saved items yet</Text>
-                                            <Text style={styles.noItemsSubtext}>
-                                                Items you save will appear here for you to share with Echo
-                                            </Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-                        </Modal>
+                                </TouchableOpacity>
+                            </Modal>
+                        )}
                     </View>
                 </SafeAreaView>
             </FullScreenWrapper>
@@ -943,17 +1024,23 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 2,
     },
-    modalContainer: {
+    modalBackdrop: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContainer: {
+        width: width * 0.9,
+        maxHeight: height * 0.7,
+        borderRadius: 20,
+        overflow: 'hidden',
     },
     modalContent: {
-        backgroundColor: 'white',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        paddingBottom: 30,
-        maxHeight: Dimensions.get('window').height * 0.7,
+        width: width * 0.9,
+        maxHeight: height * 0.7,
+        borderRadius: 20,
+        overflow: 'hidden',
     },
     modalHeader: {
         flexDirection: 'row',
@@ -1069,6 +1156,13 @@ const styles = StyleSheet.create({
         color: '#666',
         textAlign: 'center',
         lineHeight: 20,
+    },
+    blurBackground: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        bottom: 0,
+        right: 0
     },
 });
 

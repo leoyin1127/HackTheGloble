@@ -26,7 +26,7 @@ const Logo = ({ size = 'medium', showText = true }: LogoProps) => {
             case 'medium':
                 return 48;
             case 'large':
-                return 80;
+                return 100;
             default:
                 return 48;
         }
@@ -67,8 +67,8 @@ const Logo = ({ size = 'medium', showText = true }: LogoProps) => {
                         marginLeft: size === 'small' ? 4 : 8
                     }
                 ]}>
-                    <Text style={{ fontWeight: 'bold' }}>Eco</Text>
-                    <Text style={{ fontWeight: '400' }}>Swap</Text>
+                    <Text style={{ fontWeight: 'bold' }}>Echo</Text>
+                    <Text style={{ fontWeight: '400' }}></Text>
                 </Text>
             )} */}
         </View>

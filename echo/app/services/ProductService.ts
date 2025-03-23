@@ -50,6 +50,21 @@ export interface ProductFilters {
     offset?: number;
 }
 
+// Add this helper function near the top of the file
+const ensureValidUuid = (id: string): string => {
+    // Check if it's already a valid UUID
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidPattern.test(id)) return id;
+
+    // For simple numeric IDs, convert to a valid UUID format
+    if (/^\d+$/.test(id)) {
+        return `00000000-0000-0000-0000-${id.padStart(12, '0')}`;
+    }
+
+    // Return the original ID if it doesn't match any patterns
+    return id;
+};
+
 class ProductService {
     // Get products with optional filters
     async getProducts(filters: ProductFilters = {}): Promise<Product[]> {
@@ -146,13 +161,15 @@ class ProductService {
     // Get a single product by ID
     async getProductById(id: string): Promise<Product | null> {
         try {
+            const validId = ensureValidUuid(id);
+
             const { data, error } = await supabase
                 .from('products')
                 .select(`
                     *,
                     product_images (url, position)
                 `)
-                .eq('id', id)
+                .eq('id', validId)
                 .single();
 
             if (error) {
@@ -178,13 +195,16 @@ class ProductService {
         }
 
         try {
+            // Convert all IDs to valid UUID format
+            const validUuids = savedIds.map(id => ensureValidUuid(id));
+
             const { data, error } = await supabase
                 .from('products')
                 .select(`
                     *,
                     product_images (url, position)
                 `)
-                .in('id', savedIds);
+                .in('id', validUuids);
 
             if (error) {
                 console.error('Error fetching saved products:', error);

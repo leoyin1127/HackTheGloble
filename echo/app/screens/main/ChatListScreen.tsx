@@ -493,6 +493,7 @@ const ChatListScreen = () => {
                     borderBottomRightRadius: borderRadius.xxl,
                     borderTopLeftRadius: borderRadius.xxl,
                     borderTopRightRadius: borderRadius.xxl,
+                    marginTop: spacing.md,
                     ...shadows.sm
                 }
             ]}>

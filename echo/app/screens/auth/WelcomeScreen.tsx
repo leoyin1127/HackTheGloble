@@ -80,7 +80,7 @@ const WelcomeScreen = () => {
             >
                 <Logo size="large" showText={false} />
                 <Text style={[styles.appName, { color: colors.neutral.white, fontSize: typography.fontSize.hero }]}>
-                    EcoSwap
+                    Echo
                 </Text>
             </Animated.View>
 

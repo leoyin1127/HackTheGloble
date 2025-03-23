@@ -580,7 +580,10 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
     const handleChatPress = () => {
         const item = filteredItems[currentIndex];
         if (item) {
-            navigation.navigate('Chat', { sellerId: item.sellerName || 'unknown' });
+            navigation.navigate('Chat', {
+                sellerId: item.sellerName || item.seller_id || 'unknown',
+                itemId: item.id
+            });
         }
     };
 

@@ -231,7 +231,10 @@ const SavedItemsScreen = () => {
                                         backgroundColor: 'rgba(255,255,255,0.95)',
                                     }
                                 ]}
-                                onPress={() => navigation.navigate('Chat', { sellerId: item.sellerName || item.seller_id })}
+                                onPress={() => navigation.navigate('Chat', {
+                                    sellerId: item.sellerName || item.seller_id,
+                                    itemId: item.id
+                                })}
                             >
                                 <Ionicons name="chatbubble" size={18} color={colors.primary.main} />
                             </TouchableOpacity>
