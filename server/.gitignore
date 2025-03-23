@@ -48,3 +48,5 @@ uploads/*
 .temp/
 tmp/
 temp/ 
+
+data/

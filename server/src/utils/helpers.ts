@@ -9,6 +9,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_for_dev';
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d';
 const SALT_ROUNDS = 10;
 
+// Create payload interface
+interface JwtPayload {
+    id: string;
+    email: string;
+    username: string;
+    role: string;
+}
+
 /**
  * Generate a JWT token for a user
  */
@@ -20,7 +28,12 @@ export const generateToken = (user: any): string => {
         role: user.role || 'user'
     };
 
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+    // For development, use a simpler approach
+    return jwt.sign(
+        payload,
+        JWT_SECRET,
+        { expiresIn: '7d' }
+    );
 };
 
 /**

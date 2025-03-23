@@ -2,25 +2,40 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import http from 'http';
+import dotenv from 'dotenv';
 
-// Import routes
-import authRoutes from './routes/auth.routes';
-import userRoutes from './routes/user.routes';
-import productRoutes from './routes/product.routes';
-import cartRoutes from './routes/cart.routes';
-import orderRoutes from './routes/order.routes';
-import chatRoutes from './routes/chat.routes';
+// Load environment variables - try multiple potential env file locations
+const envFiles = [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '.env.development'),
+    path.resolve(process.cwd(), '../.env'),
+    path.resolve(process.cwd(), '../.env.development')
+];
 
-dotenv.config();
+for (const envFile of envFiles) {
+    if (fs.existsSync(envFile)) {
+        console.log(`Loading environment from: ${envFile}`);
+        dotenv.config({ path: envFile });
+        break;
+    }
+}
 
 const app = express();
 const DEFAULT_PORT = parseInt(process.env.PORT || '5000', 10);
 const isDevelopment = process.env.NODE_ENV === 'development';
 let PORT = DEFAULT_PORT;
+
+// Log environment variables (hide sensitive values)
+console.log('Environment variables:', {
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT,
+    SUPABASE_URL: process.env.SUPABASE_URL ? '[DEFINED]' : '[MISSING]',
+    SUPABASE_KEY: process.env.SUPABASE_KEY ? '[DEFINED]' : '[MISSING]',
+    JWT_SECRET: process.env.JWT_SECRET ? '[DEFINED]' : '[MISSING]'
+});
 
 // Middleware
 app.use(helmet());

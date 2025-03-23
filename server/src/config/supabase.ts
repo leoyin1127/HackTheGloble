@@ -1,12 +1,31 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables - try multiple potential env file locations
+const envFiles = [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '.env.development'),
+    path.resolve(process.cwd(), '../.env'),
+    path.resolve(process.cwd(), '../.env.development')
+];
+
+for (const envFile of envFiles) {
+    if (fs.existsSync(envFile)) {
+        console.log(`Loading environment from: ${envFile}`);
+        dotenv.config({ path: envFile });
+        break;
+    }
+}
 
 // For development without actual Supabase credentials
 const isDevelopment = process.env.NODE_ENV === 'development';
+console.log('Environment variables:', {
+    NODE_ENV: process.env.NODE_ENV,
+    SUPABASE_URL: process.env.SUPABASE_URL ? '[DEFINED]' : '[MISSING]',
+    SUPABASE_KEY: process.env.SUPABASE_KEY ? '[DEFINED]' : '[MISSING]'
+});
 
 // Define a type for our mock client to match SupabaseClient's structure
 interface MockClient {

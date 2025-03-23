@@ -80,13 +80,49 @@ SUPABASE_KEY=your_supabase_anon_key
 
 To import product data from the Kaggle Fashion Products dataset:
 
-1. Download the dataset from https://www.kaggle.com/datasets/paramaggarwal/fashion-product-images-dataset/data
-2. Extract the dataset files to a `data` directory at the project root
-3. Run the import script:
+1. Download one of the following datasets from Kaggle:
+   - Full dataset: https://www.kaggle.com/datasets/paramaggarwal/fashion-product-images-dataset/data
+   - Smaller dataset (recommended): https://www.kaggle.com/datasets/paramaggarwal/fashion-product-images-small
+
+2. Extract the dataset files to a `data` directory at the project root. Your structure should be:
    ```
-   node src/database/import.js [limit]
+   data/
+   ├── styles.csv
+   └── images/
+       ├── 1.jpg
+       ├── 2.jpg
+       └── ...
    ```
-   Where `[limit]` is an optional parameter to limit the number of products to import (default: 1000)
+
+#### Import Options
+
+We provide multiple ways to import data depending on your needs:
+
+1. **Direct Supabase Import** (Default):
+   ```
+   npm run import-data
+   ```
+   Simple setup that copies images to local uploads directory. Works with both the full and smaller datasets.
+
+2. **REST API-based Import**:
+   ```
+   npm run import-api
+   ```
+   Uses the application's API endpoints, ensuring all validation rules apply.
+
+3. **SQL Dump Import**:
+   ```
+   npm run import-sql
+   ```
+   Generates a SQL file that can be directly imported into PostgreSQL.
+
+4. **S3 Streaming Import**:
+   ```
+   npm run import-s3
+   ```
+   Uses AWS S3 for image storage with streaming for large datasets.
+
+See the detailed documentation in `src/scripts/README.md` for more information about each import method, their pros and cons, and required configuration.
 
 ## API Endpoints
 
@@ -134,4 +170,4 @@ To import product data from the Kaggle Fashion Products dataset:
 - `GET /api/chat/messages/:userId` - Get conversation with another user
 - `GET /api/chat/list` - Get all user's chats
 - `GET /api/chat/unread` - Get unread message count
-- `DELETE /api/chat/messages/:messageId` - Delete a message 
+- `DELETE /api/chat/messages/:messageId` - Delete a message
