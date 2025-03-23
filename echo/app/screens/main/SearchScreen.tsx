@@ -535,7 +535,11 @@ const SearchScreen = () => {
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[styles.filterChipsContainer, { paddingHorizontal: spacing.lg }]}
+                contentContainerStyle={[styles.filterChipsContainer, {
+                    paddingHorizontal: spacing.lg,
+                    paddingVertical: spacing.sm,
+                    minHeight: 50
+                }]}
             >
                 {activeFilters.map(filter => (
                     <TouchableOpacity
@@ -545,9 +549,18 @@ const SearchScreen = () => {
                             {
                                 backgroundColor: colors.primary.main,
                                 borderRadius: borderRadius.round,
-                                paddingHorizontal: spacing.md,
-                                paddingVertical: spacing.xxs,
-                                marginRight: spacing.sm,
+                                paddingHorizontal: spacing.lg,
+                                paddingVertical: spacing.sm,
+                                marginRight: spacing.md,
+                                marginBottom: spacing.xs,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                minHeight: 36,
+                                elevation: 2,
+                                shadowColor: colors.neutral.charcoal,
+                                shadowOffset: { width: 0, height: 1 },
+                                shadowOpacity: 0.2,
+                                shadowRadius: 1,
                             }
                         ]}
                         onPress={() => {
@@ -558,12 +571,15 @@ const SearchScreen = () => {
                             }
                         }}
                     >
-                        <Text style={[styles.filterChipText, { color: colors.neutral.white, fontSize: typography.fontSize.sm }]}>
+                        <Text style={[styles.filterChipText, {
+                            color: colors.neutral.white,
+                            fontSize: typography.fontSize.md,
+                            fontWeight: '500',
+                            marginRight: spacing.sm
+                        }]}>
                             {filter.label}
                         </Text>
-                        <View style={styles.filterChipIconContainer}>
-                            <Ionicons name="close-circle" size={16} color={colors.neutral.white} />
-                        </View>
+                        <Ionicons name="close-circle" size={18} color={colors.neutral.white} />
                     </TouchableOpacity>
                 ))}
 
@@ -573,14 +589,24 @@ const SearchScreen = () => {
                             styles.clearFiltersButton,
                             {
                                 borderRadius: borderRadius.round,
-                                paddingHorizontal: spacing.md,
-                                paddingVertical: spacing.xxs,
+                                paddingHorizontal: spacing.lg,
+                                paddingVertical: spacing.sm,
                                 borderColor: colors.neutral.mediumGray,
+                                marginBottom: spacing.xs,
+                                marginRight: spacing.md,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                minHeight: 36,
+                                borderWidth: 1,
                             }
                         ]}
                         onPress={clearFilters}
                     >
-                        <Text style={[styles.clearFiltersText, { color: colors.neutral.darkGray, fontSize: typography.fontSize.sm }]}>
+                        <Text style={[styles.clearFiltersText, {
+                            color: colors.neutral.darkGray,
+                            fontSize: typography.fontSize.md,
+                            fontWeight: '500'
+                        }]}>
                             Clear All
                         </Text>
                     </TouchableOpacity>
@@ -689,8 +715,9 @@ const SearchScreen = () => {
                 .map(category => category.label);
 
             if (selectedCategories.length > 0) {
+                // API only supports one category, so use the first one
                 filters.category = selectedCategories[0];
-                console.log(`SearchScreen: Adding category filter: ${selectedCategories[0]}`);
+                console.log(`SearchScreen: Adding category filter: ${selectedCategories[0]} (${selectedCategories.length} categories selected)`);
             }
 
             // Add sort options
@@ -1027,7 +1054,9 @@ const SearchScreen = () => {
             </View>
 
             {/* Filter chips */}
-            {renderFilterChips()}
+            <View style={{ marginBottom: spacing.sm }}>
+                {renderFilterChips()}
+            </View>
 
             {/* Backdrop for closing filter panel when tapping outside */}
             {isFilterVisible && (
@@ -1079,8 +1108,13 @@ const SearchScreen = () => {
                                         paddingVertical: spacing.sm,
                                         marginRight: spacing.sm,
                                         marginBottom: spacing.sm,
-                                        borderWidth: option.isSelected ? 1 : 0,
+                                        borderWidth: option.isSelected ? 2 : 0,
                                         borderColor: colors.primary.main,
+                                        elevation: option.isSelected ? 2 : 0,
+                                        shadowColor: option.isSelected ? colors.primary.dark : 'transparent',
+                                        shadowOffset: option.isSelected ? { width: 0, height: 1 } : { width: 0, height: 0 },
+                                        shadowOpacity: option.isSelected ? 0.3 : 0,
+                                        shadowRadius: option.isSelected ? 2 : 0,
                                     }
                                 ]}
                                 onPress={() => toggleFilterOption(option.id)}
@@ -1119,8 +1153,13 @@ const SearchScreen = () => {
                                         paddingVertical: spacing.sm,
                                         marginRight: spacing.sm,
                                         marginBottom: spacing.sm,
-                                        borderWidth: category.isSelected ? 1 : 0,
+                                        borderWidth: category.isSelected ? 2 : 0,
                                         borderColor: colors.primary.main,
+                                        elevation: category.isSelected ? 2 : 0,
+                                        shadowColor: category.isSelected ? colors.primary.dark : 'transparent',
+                                        shadowOffset: category.isSelected ? { width: 0, height: 1 } : { width: 0, height: 0 },
+                                        shadowOpacity: category.isSelected ? 0.3 : 0,
+                                        shadowRadius: category.isSelected ? 2 : 0,
                                     }
                                 ]}
                                 onPress={() => toggleCategoryFilter(category.id)}
@@ -1299,14 +1338,17 @@ const styles = StyleSheet.create({
     filterChipsContainer: {
         flexDirection: 'row',
         paddingVertical: 8,
+        alignItems: 'center',
     },
     filterChip: {
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 8,
+        elevation: 2, // For Android
     },
     filterChipText: {
         marginRight: 4,
+        fontWeight: '500',
     },
     filterChipIconContainer: {
         marginLeft: 2,
