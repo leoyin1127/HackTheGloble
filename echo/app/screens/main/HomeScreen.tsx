@@ -639,20 +639,8 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
 
     // Add handlers for the new buttons
     const handleAIChatPress = () => {
-        // Navigate to AI Chat screen or open modal
-        Alert.alert('AI Fashion Stylist', 'Would you like fashion advice from our AI stylist?', [
-            {
-                text: 'Cancel',
-                style: 'cancel'
-            },
-            {
-                text: 'Chat Now',
-                onPress: () => {
-                    // Replace with actual navigation to AI chat screen when implemented
-                    Alert.alert('AI Stylist', 'Welcome to your personalized fashion consultation!');
-                }
-            }
-        ]);
+        // Navigate directly to the AI Chat screen
+        navigation.navigate('AIChat');
     };
 
     // Update the measurements handler to toggle the overlay
@@ -1075,6 +1063,7 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                     <TouchableOpacity
                         style={[styles.actionButton, { backgroundColor: colors.accent.beige }]}
                         onPress={handleAIChatPress}
+                        activeOpacity={0.7}
                     >
                         <View style={styles.aiButtonContainer}>
                             <Ionicons name="chatbubble-ellipses" size={22} color={colors.neutral.white} />
