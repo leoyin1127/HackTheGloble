@@ -30,6 +30,7 @@ import ProductService, { Product } from '../../services/ProductService';
 import { useProducts } from '../../context/ProductContext';
 import { BlurView } from 'expo-blur';
 import { AIChatService } from '../../services/AIChatService';
+import { OPENAI_API_KEY } from '../../config/constants';
 
 const { width, height } = Dimensions.get('window');
 
@@ -188,12 +189,14 @@ const AIChatScreen = () => {
             timestamp: new Date(),
         };
 
+        // Save current input before clearing
+        const userInput = inputText.trim();
+
         setMessages(prevMessages => [...prevMessages, newUserMessage]);
         setInputText('');
         setIsTyping(true);
 
         // Use AI Chat Service to get response
-        const userInput = inputText.trim();
         AIChatService.sendMessage(userInput)
             .then(response => {
                 if (!isMounted.current) return;
@@ -212,15 +215,14 @@ const AIChatScreen = () => {
                 // Fallback to random response if API fails
                 if (!isMounted.current) return;
 
-                const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
-                const newAIMessage: Message = {
+                const errorMessage: Message = {
                     id: (Date.now() + 1).toString(),
-                    text: randomResponse,
+                    text: "I'm sorry, I'm having trouble connecting to my fashion database right now. Could you try again in a moment?",
                     isUser: false,
                     timestamp: new Date(),
                 };
 
-                setMessages(prevMessages => [...prevMessages, newAIMessage]);
+                setMessages(prevMessages => [...prevMessages, errorMessage]);
             })
             .finally(() => {
                 if (isMounted.current) {
@@ -499,6 +501,28 @@ const AIChatScreen = () => {
         );
     }, [handleSendSavedItem, TEAL_DARK]);
 
+    // Add API key check on initial load
+    useEffect(() => {
+        // Check if API key is properly configured
+        if (!OPENAI_API_KEY || OPENAI_API_KEY === '') {
+
+            // Add warning message only if it doesn't already exist
+            const hasApiWarning = messages.some(msg =>
+                msg.text.includes("API key not found"));
+
+            if (!hasApiWarning) {
+                const apiWarningMessage: Message = {
+                    id: Date.now().toString(),
+                    text: "⚠️ API Key Not Found: To use the real AI-powered Echo, please add your OpenAI API key to the .env file in the project root. Get your API key from platform.openai.com/api-keys",
+                    isUser: false,
+                    timestamp: new Date(),
+                };
+
+                setMessages(prevMessages => [...prevMessages, apiWarningMessage]);
+            }
+        }
+    }, []);
+
     return (
         <SafeAreaView style={styles.safeArea} edges={['top']}>
             <StatusBar style="light" />
@@ -537,10 +561,25 @@ const AIChatScreen = () => {
                         </View>
                     </View>
 
-                    <View style={styles.onlineBadge}>
-                        <View style={styles.onlineDot} />
-                        <Text style={styles.onlineText}>Online</Text>
-                    </View>
+                    <TouchableOpacity
+                        style={styles.headerAction}
+                        onPress={() => {
+                            // Reset conversation
+                            AIChatService.resetConversation();
+
+                            // Reset UI messages except for the first welcome message
+                            const welcomeMessage = messages.length > 0 ? messages[0] : {
+                                id: '1',
+                                text: "Hello! I'm Echo, your personal stylist. How can I help you discover sustainable fashion that matches your unique style?",
+                                isUser: false,
+                                timestamp: new Date(),
+                            };
+
+                            setMessages([welcomeMessage]);
+                        }}
+                    >
+                        <Ionicons name="refresh" size={24} color={WHITE} />
+                    </TouchableOpacity>
                 </View>
 
                 {/* Chat Area */}
@@ -817,25 +856,13 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: 'rgba(255,255,255,0.8)',
     },
-    onlineBadge: {
-        flexDirection: 'row',
+    headerAction: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         alignItems: 'center',
+        justifyContent: 'center',
         backgroundColor: 'rgba(0,0,0,0.1)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-    },
-    onlineDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#4CAF50',
-        marginRight: 6,
-    },
-    onlineText: {
-        fontSize: 12,
-        color: 'white',
-        fontWeight: '600',
     },
     chatContainer: {
         flex: 1,
@@ -1200,6 +1227,26 @@ const styles = StyleSheet.create({
         color: '#666',
         textAlign: 'center',
         lineHeight: 20,
+    },
+    onlineBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.1)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+    },
+    onlineDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#4CAF50',
+        marginRight: 6,
+    },
+    onlineText: {
+        fontSize: 12,
+        color: 'white',
+        fontWeight: '600',
     },
 });
 
