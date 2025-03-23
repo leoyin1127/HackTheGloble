@@ -501,7 +501,7 @@ const ChatListScreen = () => {
                     styles.header,
                     {
                         // paddingHorizontal: spacing.lg,
-                        paddingVertical: spacing.md,
+                        // paddingVertical: spacing.md,
                     }
                 ]}>
                     <Logo size="large" />

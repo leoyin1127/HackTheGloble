@@ -311,6 +311,13 @@ const SavedItemsScreen = () => {
                 <View style={[styles.header, {
                     backgroundColor: colors.neutral.white,
                     ...shadows.sm,
+                    borderTopLeftRadius: borderRadius.lg,
+                    borderTopRightRadius: borderRadius.lg,
+                    borderBottomLeftRadius: borderRadius.lg,
+                    borderBottomRightRadius: borderRadius.lg,
+                    marginHorizontal: spacing.lg,
+                    marginTop: spacing.md,
+                    height: 80,
                 }]}>
                     <Logo size="large" />
                 </View>
@@ -336,6 +343,11 @@ const SavedItemsScreen = () => {
                 <View style={[styles.header, {
                     backgroundColor: colors.neutral.white,
                     ...shadows.sm,
+                    borderTopLeftRadius: borderRadius.lg,
+                    borderTopRightRadius: borderRadius.lg,
+                    marginHorizontal: spacing.lg,
+                    marginTop: spacing.md,
+                    height: 80,
                 }]}>
                     <Logo size="large" />
                     <View style={styles.headerIcons}>
@@ -399,6 +411,11 @@ const SavedItemsScreen = () => {
                         ...shadows.md,
                         borderBottomLeftRadius: borderRadius.lg,
                         borderBottomRightRadius: borderRadius.lg,
+                        borderTopLeftRadius: borderRadius.lg,
+                        borderTopRightRadius: borderRadius.lg,
+                        marginHorizontal: spacing.lg,
+                        marginTop: spacing.md,
+                        height: 80,
                     }
                 ]}
             >
