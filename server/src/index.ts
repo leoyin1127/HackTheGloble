@@ -34,7 +34,8 @@ console.log('Environment variables:', {
     PORT: process.env.PORT,
     SUPABASE_URL: process.env.SUPABASE_URL ? '[DEFINED]' : '[MISSING]',
     SUPABASE_KEY: process.env.SUPABASE_KEY ? '[DEFINED]' : '[MISSING]',
-    JWT_SECRET: process.env.JWT_SECRET ? '[DEFINED]' : '[MISSING]'
+    JWT_SECRET: process.env.JWT_SECRET ? '[DEFINED]' : '[MISSING]',
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '[DEFINED]' : '[MISSING]'
 });
 
 // Middleware
@@ -116,6 +117,16 @@ try {
     const error = err as Error;
     console.warn('Chat routes not available:', error.message);
     app.use('/api/chat', mockRoutes('Chat'));
+}
+
+try {
+    const aiChatRoutes = require('./routes/ai-chat.routes').default;
+    app.use('/api/ai-chat', aiChatRoutes);
+    console.log('Loaded AI chat routes');
+} catch (err) {
+    const error = err as Error;
+    console.warn('AI chat routes not available:', error.message);
+    app.use('/api/ai-chat', mockRoutes('AI Chat'));
 }
 
 // Function to create mock routes for development

@@ -29,6 +29,7 @@ import { MainStackParamList } from '../../navigation/AppNavigator';
 import ProductService, { Product } from '../../services/ProductService';
 import { useProducts } from '../../context/ProductContext';
 import { BlurView } from 'expo-blur';
+import { AIChatService } from '../../services/AIChatService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -191,23 +192,41 @@ const AIChatScreen = () => {
         setInputText('');
         setIsTyping(true);
 
-        // Simulate AI response delay
-        const responseTimer = setTimeout(() => {
-            if (!isMounted.current) return;
+        // Use AI Chat Service to get response
+        const userInput = inputText.trim();
+        AIChatService.sendMessage(userInput)
+            .then(response => {
+                if (!isMounted.current) return;
 
-            const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
-            const newAIMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                text: randomResponse,
-                isUser: false,
-                timestamp: new Date(),
-            };
+                const newAIMessage: Message = {
+                    id: (Date.now() + 1).toString(),
+                    text: response.content,
+                    isUser: false,
+                    timestamp: new Date(response.timestamp),
+                };
 
-            setMessages(prevMessages => [...prevMessages, newAIMessage]);
-            setIsTyping(false);
-        }, 1500);
+                setMessages(prevMessages => [...prevMessages, newAIMessage]);
+            })
+            .catch(error => {
+                console.error('Error getting AI response:', error);
+                // Fallback to random response if API fails
+                if (!isMounted.current) return;
 
-        return () => clearTimeout(responseTimer);
+                const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
+                const newAIMessage: Message = {
+                    id: (Date.now() + 1).toString(),
+                    text: randomResponse,
+                    isUser: false,
+                    timestamp: new Date(),
+                };
+
+                setMessages(prevMessages => [...prevMessages, newAIMessage]);
+            })
+            .finally(() => {
+                if (isMounted.current) {
+                    setIsTyping(false);
+                }
+            });
     }, [inputText]);
 
     // Auto-scroll to the latest message

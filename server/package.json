@@ -15,7 +15,8 @@
     "import-sql": "ts-node src/scripts/import-sql-dump.ts",
     "import-s3": "ts-node src/scripts/import-s3.ts",
     "upload-images": "NODE_OPTIONS=\"--max-old-space-size=8192\" ts-node src/scripts/upload-images-to-supabase.ts",
-    "direct-import": "ts-node src/scripts/direct-image-import.ts"
+    "direct-import": "ts-node src/scripts/direct-image-import.ts",
+    "test-openai": "ts-node src/test-openai.ts"
   },
   "keywords": [],
   "author": "",
@@ -36,6 +37,7 @@
     "mime-types": "^2.1.35",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "openai": "^4.89.0",
     "uuid": "^9.0.1",
     "zod": "^3.22.4"
   },
