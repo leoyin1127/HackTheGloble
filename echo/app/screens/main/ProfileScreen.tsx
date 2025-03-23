@@ -11,11 +11,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import PlaceholderImage from '../../components/PlaceholderImage';
 
 const ProfileScreen = () => {
     const navigation = useNavigation();
     const { colors, spacing, borderRadius, typography, shadows } = useTheme();
+    const { signOut } = useAuth();
 
     const menuItems = [
         { icon: 'heart-outline', label: 'Saved Items', screen: 'Saved' },
@@ -24,6 +26,23 @@ const ProfileScreen = () => {
         { icon: 'help-circle-outline', label: 'Help & Support' },
         { icon: 'log-out-outline', label: 'Log Out' },
     ];
+
+    const handleMenuItemPress = async (item: typeof menuItems[0]) => {
+        if (item.screen) {
+            navigation.navigate(item.screen as never);
+        } else if (item.label === 'Log Out') {
+            try {
+                await signOut();
+                // Navigate to SignUp screen
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'SignUp' as never }]
+                });
+            } catch (error) {
+                console.error('Error signing out:', error);
+            }
+        }
+    };
 
     const renderMenuItem = (item: typeof menuItems[0], index: number) => (
         <TouchableOpacity
@@ -37,7 +56,7 @@ const ProfileScreen = () => {
                     ...shadows.sm,
                 },
             ]}
-            onPress={() => item.screen && navigation.navigate(item.screen as never)}
+            onPress={() => handleMenuItemPress(item)}
         >
             <View style={styles.menuItemContent}>
                 <View style={[styles.iconContainer, { backgroundColor: `${colors.primary.light}30` }]}>

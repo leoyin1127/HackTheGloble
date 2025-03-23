@@ -414,8 +414,20 @@ const AIChatScreen = () => {
     const handleSendSavedItem = useCallback((item: Product) => {
         if (!isMounted.current) return;
 
-        // First update input text
-        const itemText = `Can you tell me more about this ${item.title}? It costs $${item.price.toFixed(2)} and has sustainability score of ${item.sustainability}/100.`;
+        // Create a comprehensive description with more item details
+        const sustainabilityBadges = item.sustainability_badges ? item.sustainability_badges.join(', ') : 'None';
+
+        const itemText = `I'm interested in this item:
+Product: ${item.title}
+Price: $${item.price.toFixed(2)}
+Condition: ${item.condition || 'Used'}
+Sustainability Score: ${item.sustainability}/100
+Sustainability Badges: ${sustainabilityBadges}
+Description: ${item.description || 'No description available'}
+Seller: ${item.sellerName || 'Unknown seller'}
+
+Can you provide me with styling advice for this item? How sustainable is it? Would you recommend it?`;
+
         setInputText(itemText);
 
         // Close modal
