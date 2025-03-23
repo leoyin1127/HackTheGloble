@@ -13,7 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useTheme } from '../../context/ThemeContext';
 import { Button } from '../../components/Button';
-import Logo from '../../components/Logo';
+import ManualLogo from '../../components/ManualLogo';
 import { AuthStackParamList } from '../../navigation/AppNavigator';
 
 const { width, height } = Dimensions.get('window');
@@ -78,7 +78,7 @@ const WelcomeScreen = () => {
                     }
                 ]}
             >
-                <Logo size="large" showText={false} />
+                <ManualLogo size={300} />
                 <Text style={[styles.appName, { color: colors.neutral.white, fontSize: typography.fontSize.hero }]}>
                     Echo
                 </Text>

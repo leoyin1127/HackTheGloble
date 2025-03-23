@@ -3,9 +3,10 @@ import { View, StyleSheet, Animated, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useTheme } from '../../context/ThemeContext';
-import Logo from '../../components/Logo';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AuthStackParamList } from '../../navigation/AppNavigator';
+import ManualLogo from '../../components/ManualLogo';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
@@ -65,8 +66,12 @@ const SplashScreen = () => {
                     }
                 ]}
             >
-                <Logo size="large" />
+                <ManualLogo size={240} />
             </Animated.View>
+
+            <View style={{ position: 'absolute', opacity: 0 }}>
+                <Ionicons name="heart" size={1} />
+            </View>
         </View>
     );
 };
