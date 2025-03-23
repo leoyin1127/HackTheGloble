@@ -12,6 +12,7 @@ import {
     StatusBar,
     Image,
     Animated,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
@@ -24,6 +25,9 @@ import { Button } from '../../components/Button';
 import PlaceholderImage from '../../components/PlaceholderImage';
 import { MainStackParamList } from '../../navigation/AppNavigator';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useProducts } from '../../context/ProductContext';
+import { Product, ProductFilters } from '../../services/ProductService';
+import ProductService from '../../services/ProductService';
 
 type SearchScreenRouteProp = RouteProp<MainStackParamList, 'Search'>;
 type SearchScreenNavigationProp = StackNavigationProp<MainStackParamList, 'Search'>;
@@ -34,68 +38,13 @@ interface FilterOption {
     isSelected: boolean;
 }
 
-// Use the same dataset as HomeScreen
-const ITEMS = [
-    {
-        id: '1',
-        title: 'Vintage Denim Jacket',
-        price: '$45.00',
-        description: 'This classic denim jacket has been upcycled with sustainable materials. Perfect for any casual outfit.',
-        image: { uri: 'https://placehold.co/600x800/E0F7FA/2C3E50?text=Denim+Jacket' },
-        sellerName: 'ameliegong',
-        sellerRating: 5,
-        sellerAvatar: { uri: 'https://i.pinimg.com/1200x/77/00/70/7700709ac1285b907c498a70fbccea5e.jpg' },
-        sustainability: 95,
-        sustainabilityBadges: ['Organic', 'Recycled', 'Local'],
-        categories: ['Clothing']
-    },
-    {
-        id: '2',
-        title: 'Handcrafted Plant Pot',
-        price: '$28.00',
-        description: 'Hand-crafted ceramic pot made from reclaimed clay. Each piece is unique and helps reduce waste.',
-        image: { uri: 'https://placehold.co/600x800/E8F5E9/2C3E50?text=Plant+Pot' },
-        sellerName: 'ecofriendly',
-        sellerRating: 4.8,
-        sellerAvatar: { uri: 'https://i.pinimg.com/1200x/77/00/70/7700709ac1285b907c498a70fbccea5e.jpg' },
-        sustainability: 87,
-        sustainabilityBadges: ['Handmade', 'Recycled'],
-        categories: ['Home']
-    },
-    {
-        id: '3',
-        title: 'Organic Cotton Shirt',
-        price: '$32.00',
-        description: 'Made with 100% organic cotton and natural dyes. Comfortable, breathable, and eco-friendly.',
-        image: { uri: 'https://placehold.co/600x800/F9FBE7/2C3E50?text=Shirt' },
-        sellerName: 'greenbasics',
-        sellerRating: 4.5,
-        sellerAvatar: { uri: 'https://i.pinimg.com/1200x/77/00/70/7700709ac1285b907c498a70fbccea5e.jpg' },
-        sustainability: 92,
-        sustainabilityBadges: ['Organic', 'Fair Trade'],
-        categories: ['Clothing']
-    },
-    {
-        id: '4',
-        title: 'Bamboo Desk Organizer',
-        price: '$18.99',
-        description: 'Sustainable bamboo desk organizer to keep your workspace tidy. Naturally antibacterial and renewable.',
-        image: { uri: 'https://placehold.co/600x800/E1F5FE/2C3E50?text=Organizer' },
-        sellerName: 'sustainashop',
-        sellerRating: 4.7,
-        sellerAvatar: { uri: 'https://i.pinimg.com/1200x/77/00/70/7700709ac1285b907c498a70fbccea5e.jpg' },
-        sustainability: 90,
-        sustainabilityBadges: ['Renewable', 'Biodegradable'],
-        categories: ['Home', 'Office']
-    },
-];
-
 const { width } = Dimensions.get('window');
 
 const SearchScreen = () => {
     const route = useRoute<SearchScreenRouteProp>();
     const navigation = useNavigation<SearchScreenNavigationProp>();
     const { colors, spacing, typography, borderRadius, shadows, animation } = useTheme();
+    const { products, loading, error, fetchProducts } = useProducts();
 
     const [searchQuery, setSearchQuery] = useState(route.params?.query || '');
     const [isFilterVisible, setIsFilterVisible] = useState(false);
@@ -119,59 +68,41 @@ const SearchScreen = () => {
         { id: 'jewelry', label: 'Jewelry', isSelected: route.params?.category === 'Jewelry' || false },
     ]);
 
-    const [results, setResults] = useState(ITEMS);
+    const [results, setResults] = useState<Product[]>([]);
     const [listLayout, setListLayout] = useState<'grid' | 'list'>('grid');
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+    const [page, setPage] = useState(1);
+    const [hasMoreData, setHasMoreData] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [loadedItemIds, setLoadedItemIds] = useState<Set<string>>(new Set());
 
-    // Filter results based on search query and filters
+    // Fetch products based on search query and filters with debounce
     useEffect(() => {
-        let filteredResults = [...ITEMS];
-
-        // Filter by search query
-        if (searchQuery) {
-            filteredResults = filteredResults.filter(item =>
-                item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.sellerName.toLowerCase().includes(searchQuery.toLowerCase())
-            );
+        // Clear any existing timeout to implement debouncing
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
         }
 
-        // Filter by category
-        const selectedCategories = categoryFilters
-            .filter(category => category.isSelected)
-            .map(category => category.label);
+        // Set a new timeout for the search
+        const timeout = setTimeout(() => {
+            fetchFilteredProducts();
+        }, 500); // 500ms debounce delay
 
-        if (selectedCategories.length > 0) {
-            filteredResults = filteredResults.filter(item =>
-                item.categories && item.categories.some(category => selectedCategories.includes(category))
-            );
-        }
+        setSearchTimeout(timeout);
 
-        // Sort by selected filter option
-        const selectedFilter = filterOptions.find(option => option.isSelected);
-        if (selectedFilter) {
-            switch (selectedFilter.id) {
-                case 'highRating':
-                    filteredResults.sort((a, b) => b.sellerRating - a.sellerRating);
-                    break;
-                case 'lowPrice':
-                    filteredResults.sort((a, b) =>
-                        parseFloat(a.price.replace('$', '')) - parseFloat(b.price.replace('$', ''))
-                    );
-                    break;
-                case 'highPrice':
-                    filteredResults.sort((a, b) =>
-                        parseFloat(b.price.replace('$', '')) - parseFloat(a.price.replace('$', ''))
-                    );
-                    break;
-                case 'highSustainability':
-                    filteredResults.sort((a, b) => b.sustainability - a.sustainability);
-                    break;
-                // For 'featured' and 'newest', we'll keep the default order
+        // Cleanup function to clear timeout when component unmounts
+        return () => {
+            if (timeout) {
+                clearTimeout(timeout);
             }
-        }
-
-        setResults(filteredResults);
+        };
     }, [searchQuery, filterOptions, categoryFilters]);
+
+    // Update results when products change
+    useEffect(() => {
+        setResults(products);
+    }, [products]);
 
     const toggleFilterOption = (id: string) => {
         setFilterOptions(options =>
@@ -281,15 +212,21 @@ const SearchScreen = () => {
     });
 
     // Enhanced card item rendering with sustainability score and seller info
-    const renderGridItem = ({ item, index }: { item: typeof ITEMS[0], index: number }) => {
+    const renderGridItem = ({ item, index }: { item: Product, index: number }) => {
         const itemOpacity = gridItemsAnim.interpolate({
             inputRange: [0, 1],
             outputRange: [0, 1],
         });
+
         const itemTranslate = gridItemsAnim.interpolate({
             inputRange: [0, 1],
             outputRange: [50, 0],
         });
+
+        // Get the first image or use a placeholder
+        const imageUri = item.images && item.images.length > 0
+            ? item.images[0]
+            : item.supabase_image_url || 'https://placehold.co/600x800/E0F7FA/2C3E50?text=No+Image';
 
         return (
             <Animated.View
@@ -314,7 +251,7 @@ const SearchScreen = () => {
                 >
                     <View style={[styles.imageContainer, { position: 'relative' }]}>
                         <Image
-                            source={item.image}
+                            source={{ uri: imageUri }}
                             style={[
                                 styles.itemImage,
                                 {
@@ -381,7 +318,7 @@ const SearchScreen = () => {
                                     }
                                 ]}
                             >
-                                {item.sellerName}
+                                {item.sellerName || 'seller'}
                             </Text>
                             <View style={styles.ratingContainer}>
                                 <Ionicons name="star" size={14} color={colors.accent.beige} />
@@ -392,7 +329,7 @@ const SearchScreen = () => {
                                         fontSize: typography.fontSize.xs,
                                     }
                                 ]}>
-                                    {item.sellerRating}
+                                    4.5
                                 </Text>
                             </View>
                         </View>
@@ -406,7 +343,7 @@ const SearchScreen = () => {
                                     fontWeight: '700',
                                 }
                             ]}>
-                                {item.price}
+                                ${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}
                             </Text>
                         </View>
                     </View>
@@ -416,15 +353,21 @@ const SearchScreen = () => {
     };
 
     // List view rendering
-    const renderListItem = ({ item, index }: { item: typeof ITEMS[0], index: number }) => {
+    const renderListItem = ({ item, index }: { item: Product, index: number }) => {
         const itemOpacity = gridItemsAnim.interpolate({
             inputRange: [0, 1],
             outputRange: [0, 1],
         });
+
         const itemTranslate = gridItemsAnim.interpolate({
             inputRange: [0, 1],
             outputRange: [50, 0],
         });
+
+        // Get the first image or use a placeholder
+        const imageUri = item.images && item.images.length > 0
+            ? item.images[0]
+            : item.supabase_image_url || 'https://placehold.co/600x800/E0F7FA/2C3E50?text=No+Image';
 
         return (
             <Animated.View
@@ -450,7 +393,7 @@ const SearchScreen = () => {
                 >
                     <View style={styles.listImageContainer}>
                         <Image
-                            source={item.image}
+                            source={{ uri: imageUri }}
                             style={[
                                 styles.listItemImage,
                                 {
@@ -518,7 +461,7 @@ const SearchScreen = () => {
                                     fontWeight: '700',
                                 }
                             ]}>
-                                {item.price}
+                                ${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}
                             </Text>
                         </View>
 
@@ -550,7 +493,7 @@ const SearchScreen = () => {
                                         }
                                     ]}
                                 >
-                                    {item.sellerName}
+                                    {item.sellerName || 'seller'}
                                 </Text>
                                 <Ionicons name="star" size={14} color={colors.accent.beige} />
                                 <Text style={[
@@ -560,7 +503,7 @@ const SearchScreen = () => {
                                         fontSize: typography.fontSize.xs,
                                     }
                                 ]}>
-                                    {item.sellerRating}
+                                    4.5
                                 </Text>
                             </View>
                         </View>
@@ -680,6 +623,260 @@ const SearchScreen = () => {
             />
         </View>
     );
+
+    // Loading indicator when searching
+    const renderLoading = () => (
+        <View style={[styles.loadingContainer, { marginTop: spacing.xxxl }]}>
+            <ActivityIndicator size="large" color={colors.primary.main} />
+            <Text style={{ marginTop: spacing.md, color: colors.neutral.darkGray }}>
+                Searching...
+            </Text>
+        </View>
+    );
+
+    // Update the fetchFilteredProducts function with better edge case handling
+    const fetchFilteredProducts = async (loadMore = false) => {
+        try {
+            console.log('Starting fetchFilteredProducts. LoadMore:', loadMore, 'Query:', searchQuery,
+                'Current results:', results.length, 'Total unique IDs loaded:', loadedItemIds.size);
+
+            if (loadMore) {
+                setIsLoadingMore(true);
+            } else {
+                setIsSearching(true);
+                // Reset to page 1 and clear loaded items when starting a new search
+                setPage(1);
+                setLoadedItemIds(new Set());
+            }
+
+            // Check if we're loading the same filter conditions repeatedly
+            if (loadMore && results.length > 100) {
+                console.log('Reached reasonable limit of items to load');
+                setHasMoreData(false);
+                setIsLoadingMore(false);
+                setIsSearching(false);
+                return;
+            }
+
+            const filters: ProductFilters = {
+                searchQuery: searchQuery,
+                limit: loadMore ? 30 : 15, // Request more when loading more to account for duplicates
+                offset: loadMore ? results.length : 0, // Use actual results length as offset
+            };
+
+            // Add category filters
+            const selectedCategories = categoryFilters
+                .filter(category => category.isSelected)
+                .map(category => category.label);
+
+            if (selectedCategories.length > 0) {
+                filters.category = selectedCategories[0]; // Use the first selected category
+            }
+
+            // Add sort options
+            const selectedFilter = filterOptions.find(option => option.isSelected);
+            if (selectedFilter) {
+                switch (selectedFilter.id) {
+                    case 'lowPrice':
+                        filters.sortBy = 'price_asc';
+                        break;
+                    case 'highPrice':
+                        filters.sortBy = 'price_desc';
+                        break;
+                    case 'newest':
+                        filters.sortBy = 'newest';
+                        break;
+                    case 'highSustainability':
+                        filters.sortBy = 'sustainability';
+                        break;
+                    // Featured is the default
+                }
+            }
+
+            console.log('Search filters:', JSON.stringify(filters));
+
+            // Call the API to get new products
+            let fetchedProducts: Product[] = [];
+            try {
+                console.log(`Calling ProductService.getProducts with offset: ${filters.offset}, limit: ${filters.limit}`);
+
+                // Call the API method directly from ProductService
+                const data = await ProductService.getProducts(filters);
+
+                if (data && data.length > 0) {
+                    console.log('API returned data:', data.length);
+
+                    // Filter out already loaded items
+                    fetchedProducts = data.filter(item => !loadedItemIds.has(item.id));
+                    console.log('After filtering duplicates:', fetchedProducts.length);
+
+                    // Update the set of loaded item IDs
+                    const newLoadedItemIds = new Set(loadedItemIds);
+                    fetchedProducts.forEach(item => newLoadedItemIds.add(item.id));
+                    setLoadedItemIds(newLoadedItemIds);
+
+                    console.log('Total unique items now:', newLoadedItemIds.size);
+                } else {
+                    console.log('API returned no data or empty array');
+                }
+            } catch (apiError) {
+                console.error('API error:', apiError);
+                // Use fallback data if needed and if we haven't loaded them already
+                const fallbackData = getFallbackData();
+                // Filter out already loaded fallback items
+                fetchedProducts = fallbackData.filter(item => !loadedItemIds.has(item.id));
+
+                if (fetchedProducts.length > 0) {
+                    console.log('Using fallback data, found', fetchedProducts.length, 'new items');
+                    // Update loaded IDs with fallback data
+                    const newLoadedItemIds = new Set(loadedItemIds);
+                    fetchedProducts.forEach(item => newLoadedItemIds.add(item.id));
+                    setLoadedItemIds(newLoadedItemIds);
+                } else {
+                    console.log('No new fallback items available');
+                }
+            }
+
+            // If there are no new products or the response is empty, set hasMoreData to false
+            if (fetchedProducts.length === 0) {
+                console.log('No unique results found, setting hasMoreData to false');
+                setHasMoreData(false);
+                setIsLoadingMore(false);
+                setIsSearching(false);
+                return;
+            }
+
+            // Increment page number if loading more
+            if (loadMore) {
+                setPage(prevPage => prevPage + 1);
+            }
+
+            // Update the results directly rather than waiting for the useEffect
+            if (loadMore) {
+                setResults(prevResults => [...prevResults, ...fetchedProducts]);
+                console.log(`Updated results: ${results.length} + ${fetchedProducts.length} new items`);
+            } else {
+                setResults(fetchedProducts);
+                console.log(`Set new results with ${fetchedProducts.length} items`);
+            }
+
+            // Set hasMoreData based on whether we got as many items as requested
+            const requestedLimit = filters.limit || 15;
+            const gotFullPage = fetchedProducts.length >= requestedLimit / 2; // Consider half-full pages as potentially having more
+            setHasMoreData(gotFullPage);
+            console.log(`Setting hasMoreData to ${gotFullPage} based on received ${fetchedProducts.length} vs limit ${requestedLimit}`);
+
+        } catch (error) {
+            console.error('Error fetching search results:', error);
+            setHasMoreData(false);
+        } finally {
+            setIsLoadingMore(false);
+            setIsSearching(false);
+        }
+    };
+
+    // Add a fallback data function
+    const getFallbackData = (): Product[] => {
+        return [
+            {
+                id: '1',
+                title: 'Vintage Denim Jacket',
+                price: 45.0,
+                description: 'This classic denim jacket has been upcycled with sustainable materials. Perfect for any casual outfit.',
+                images: ['https://placehold.co/600x800/E0F7FA/2C3E50?text=Denim+Jacket'],
+                condition: 'good',
+                seller_id: 'user123',
+                sellerName: 'ameliegong',
+                sustainability: 95,
+                sustainability_badges: ['Organic', 'Recycled', 'Local'],
+                sustainability_info: {},
+                created_at: new Date(),
+                updated_at: new Date(),
+            },
+            {
+                id: '2',
+                title: 'Handcrafted Plant Pot',
+                price: 28.0,
+                description: 'Hand-crafted ceramic pot made from reclaimed clay. Each piece is unique and helps reduce waste.',
+                images: ['https://placehold.co/600x800/E8F5E9/2C3E50?text=Plant+Pot'],
+                condition: 'excellent',
+                seller_id: 'user456',
+                sellerName: 'ecofriendly',
+                sustainability: 87,
+                sustainability_badges: ['Handmade', 'Recycled'],
+                sustainability_info: {},
+                created_at: new Date(),
+                updated_at: new Date(),
+            },
+            {
+                id: '3',
+                title: 'Organic Cotton Shirt',
+                price: 32.0,
+                description: 'Made with 100% organic cotton and natural dyes. Comfortable, breathable, and eco-friendly.',
+                images: ['https://placehold.co/600x800/F9FBE7/2C3E50?text=Shirt'],
+                condition: 'good',
+                seller_id: 'user789',
+                sellerName: 'greenbasics',
+                sustainability: 92,
+                sustainability_badges: ['Organic', 'Fair Trade'],
+                sustainability_info: {},
+                created_at: new Date(),
+                updated_at: new Date(),
+            },
+        ];
+    };
+
+    // Override the useEffect that watches products to properly handle pagination
+    useEffect(() => {
+        // Only update the entire results list when not loading more
+        if (!isLoadingMore) {
+            setResults(products);
+        }
+    }, [products, isLoadingMore]);
+
+    // Modify the handleLoadMore function to better manage pagination
+    const handleLoadMore = () => {
+        if (hasMoreData && !isLoadingMore) {
+            console.log(`Loading more items from page ${page + 1}, current count: ${results.length}`);
+            fetchFilteredProducts(true);
+        }
+    };
+
+    // Update the renderLoadMoreButton to provide better user feedback
+    const renderLoadMoreButton = () => {
+        if (!hasMoreData) return null;
+
+        return (
+            <View style={[styles.loadMoreContainer, { marginVertical: spacing.lg, alignItems: 'center' }]}>
+                {isLoadingMore ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <ActivityIndicator size="small" color={colors.primary.main} />
+                        <Text style={{ marginLeft: spacing.sm, color: colors.neutral.darkGray }}>
+                            Loading more...
+                        </Text>
+                    </View>
+                ) : (
+                    <TouchableOpacity
+                        style={[
+                            styles.loadMoreButton,
+                            {
+                                backgroundColor: colors.primary.main,
+                                borderRadius: borderRadius.lg,
+                                paddingVertical: spacing.sm,
+                                paddingHorizontal: spacing.lg,
+                                ...shadows.sm
+                            }
+                        ]}
+                        onPress={handleLoadMore}
+                    >
+                        <Text style={{ color: colors.neutral.white, fontWeight: '600' }}>
+                            Load More Results
+                        </Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+        );
+    };
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.neutral.offWhite }]}>
@@ -944,25 +1141,30 @@ const SearchScreen = () => {
             </View>
 
             {/* Results Grid */}
-            {results.length > 0 ? (
-                <FlatList
-                    data={results}
-                    renderItem={listLayout === 'grid' ? renderGridItem : renderListItem}
-                    keyExtractor={(item) => item.id}
-                    numColumns={listLayout === 'grid' ? 2 : 1}
-                    key={listLayout} // This forces FlatList to re-render when layout changes
-                    contentContainerStyle={[
-                        styles.resultsList,
-                        {
-                            paddingHorizontal: listLayout === 'grid' ? spacing.md : spacing.lg,
-                            paddingBottom: spacing.xxxl
-                        }
-                    ]}
-                    showsVerticalScrollIndicator={false}
-                    columnWrapperStyle={listLayout === 'grid' ? { justifyContent: 'space-between' } : undefined}
-                />
+            {isSearching ? (
+                renderLoading()
             ) : (
-                renderEmptyState()
+                results.length > 0 ? (
+                    <FlatList
+                        data={results}
+                        renderItem={listLayout === 'grid' ? renderGridItem : renderListItem}
+                        keyExtractor={(item, index) => `${item.id}-${index}`}
+                        numColumns={listLayout === 'grid' ? 2 : 1}
+                        key={listLayout} // This forces FlatList to re-render when layout changes
+                        contentContainerStyle={[
+                            styles.resultsList,
+                            {
+                                paddingHorizontal: listLayout === 'grid' ? spacing.md : spacing.lg,
+                                paddingBottom: spacing.xxxl
+                            }
+                        ]}
+                        showsVerticalScrollIndicator={false}
+                        columnWrapperStyle={listLayout === 'grid' ? { justifyContent: 'space-between' } : undefined}
+                        ListFooterComponent={renderLoadMoreButton}
+                    />
+                ) : (
+                    renderEmptyState()
+                )
             )}
         </SafeAreaView>
     );
@@ -1090,6 +1292,11 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         margin: 4,
     },
+    listCard: {
+        overflow: 'hidden',
+        margin: 8,
+        flexDirection: 'row',
+    },
     imageContainer: {
         position: 'relative',
     },
@@ -1165,11 +1372,6 @@ const styles = StyleSheet.create({
         height: 4,
         borderRadius: 2,
     },
-    listCard: {
-        overflow: 'hidden',
-        margin: 8,
-        flexDirection: 'row',
-    },
     listImageContainer: {
         position: 'relative',
         width: 120,
@@ -1214,6 +1416,24 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.15,
         shadowRadius: 3,
         elevation: 5,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadMoreContainer: {
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadMoreButton: {
+        minWidth: 120,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadMoreText: {
+        fontSize: 16,
     },
 });
 

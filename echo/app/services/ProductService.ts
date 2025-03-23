@@ -139,19 +139,19 @@ class ProductService {
     }
 
     // Get a single product by ID
-    async getProductById(id: string): Promise<Product | null> {
+    async getProductDetails(id: string): Promise<Product | null> {
         try {
             const { data, error } = await supabase
                 .from('products')
                 .select(`
-          *,
-          product_images (url, position)
-        `)
+                    *,
+                    product_images (*)
+                `)
                 .eq('id', id)
                 .single();
 
             if (error) {
-                console.error('Error fetching product by ID:', error);
+                console.error('Error fetching product details:', error);
                 throw new Error(error.message);
             }
 
@@ -161,31 +161,102 @@ class ProductService {
 
             return this.transformProduct(data);
         } catch (error) {
-            console.error('Error in getProductById:', error);
+            console.error('Error in getProductDetails:', error);
             throw error;
         }
     }
 
-    // Get products by category
-    async getProductsByCategory(category: string, limit = 20): Promise<Product[]> {
+    // Get saved products for SavedItemsScreen
+    async getSavedProducts(savedIds: string[]): Promise<Product[]> {
+        if (!savedIds || savedIds.length === 0) {
+            return [];
+        }
+
         try {
             const { data, error } = await supabase
                 .from('products')
                 .select(`
-          *,
-          product_images (url, position)
-        `)
-                .or(`master_category.eq.${category},sub_category.eq.${category}`)
-                .limit(limit);
+                    *,
+                    product_images (url, position)
+                `)
+                .in('id', savedIds);
+
+            if (error) {
+                console.error('Error fetching saved products:', error);
+                throw new Error(error.message);
+            }
+
+            return this.transformProducts(data || []);
+        } catch (error) {
+            console.error('Error in getSavedProducts:', error);
+            throw error;
+        }
+    }
+
+    // Get products by category with pagination for SearchScreen
+    async getProductsByCategory(category: string, page = 1, pageSize = 20): Promise<{ products: Product[], totalCount: number }> {
+        try {
+            // First get count for pagination
+            const { count, error: countError } = await supabase
+                .from('products')
+                .select('id', { count: 'exact' })
+                .eq('master_category', category);
+
+            if (countError) {
+                console.error('Error counting products by category:', countError);
+                throw new Error(countError.message);
+            }
+
+            // Calculate pagination
+            const from = (page - 1) * pageSize;
+            const to = from + pageSize - 1;
+
+            // Get paginated data
+            const { data, error } = await supabase
+                .from('products')
+                .select(`
+                    *,
+                    product_images (url, position)
+                `)
+                .eq('master_category', category)
+                .range(from, to);
 
             if (error) {
                 console.error('Error fetching products by category:', error);
                 throw new Error(error.message);
             }
 
-            return this.transformProducts(data || []);
+            return {
+                products: this.transformProducts(data || []),
+                totalCount: count || 0
+            };
         } catch (error) {
             console.error('Error in getProductsByCategory:', error);
+            throw error;
+        }
+    }
+
+    // Get related products for ItemDetailScreen
+    async getRelatedProducts(productId: string, category: string, limit = 5): Promise<Product[]> {
+        try {
+            const { data, error } = await supabase
+                .from('products')
+                .select(`
+                    *,
+                    product_images (url, position)
+                `)
+                .eq('master_category', category)
+                .neq('id', productId)
+                .limit(limit);
+
+            if (error) {
+                console.error('Error fetching related products:', error);
+                throw new Error(error.message);
+            }
+
+            return this.transformProducts(data || []);
+        } catch (error) {
+            console.error('Error in getRelatedProducts:', error);
             throw error;
         }
     }
@@ -196,9 +267,9 @@ class ProductService {
             const { data, error } = await supabase
                 .from('products')
                 .select(`
-          *,
-          product_images (url, position)
-        `)
+                    *,
+                    product_images (url, position)
+                `)
                 .order('sustainability', { ascending: false })
                 .limit(limit);
 

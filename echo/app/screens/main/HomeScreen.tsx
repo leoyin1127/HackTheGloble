@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
     View,
     Text,
@@ -12,6 +12,7 @@ import {
     ImageBackground,
     TextInput,
     ActivityIndicator,
+    Button,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,9 +23,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../../context/ThemeContext';
 import { MainStackParamList } from '../../navigation/AppNavigator';
-import ProductService, { Product } from '../../services/ProductService';
+import ProductService, { Product, ProductFilters } from '../../services/ProductService';
+import { useProducts } from '../../context/ProductContext';
+import Logo from '../../components/Logo';
+import Swiper from 'react-native-deck-swiper';
+import Screen from '../../components/Screen';
 
-type HomeScreenNavigationProp = StackNavigationProp<MainStackParamList>;
+type HomeScreenNavigationProp = StackNavigationProp<MainStackParamList, 'Home'>;
 
 const { width, height } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 120;
@@ -84,15 +89,57 @@ const FALLBACK_ITEMS = [
 // Add a baseUrl for the server API
 const API_BASE_URL = 'http://localhost:3000';
 
-const HomeScreen = () => {
-    const navigation = useNavigation<HomeScreenNavigationProp>();
+// Define the getFallbackData function properly, before it's used
+const getFallbackData = () => {
+    return [
+        // Sample fallback products
+        {
+            id: 'fallback1',
+            title: 'Fallback Product 1',
+            price: 29.99,
+            description: 'A sustainable fallback product',
+            category: 'Clothing',
+            image: 'https://via.placeholder.com/150',
+            images: ['https://via.placeholder.com/150'],
+            condition: 'new',
+            seller_id: 'fallback-seller',
+            sellerName: 'EcoShop',
+            sustainability: 8,
+            sustainability_badges: ['Eco-friendly'],
+            sustainability_info: {},
+            created_at: new Date(),
+            updated_at: new Date(),
+        },
+        {
+            id: 'fallback2',
+            title: 'Fallback Product 2',
+            price: 39.99,
+            description: 'Another sustainable fallback product',
+            category: 'Home',
+            image: 'https://via.placeholder.com/150',
+            images: ['https://via.placeholder.com/150'],
+            condition: 'good',
+            seller_id: 'fallback-seller',
+            sellerName: 'GreenStore',
+            sustainability: 9,
+            sustainability_badges: ['Recycled'],
+            sustainability_info: {},
+            created_at: new Date(),
+            updated_at: new Date(),
+        }
+    ];
+};
+
+const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
     const { colors, spacing, typography, borderRadius, shadows, animation } = useTheme();
-    const [currentIndex, setCurrentIndex] = useState(0);
+    const { featuredProducts, getFeaturedProducts, loading: productsLoading, error } = useProducts();
+
+    const [currentIndex, setCurrentIndex] = useState<number>(0);
     const [savedItems, setSavedItems] = useState<string[]>([]);
     const [showGoodChoice, setShowGoodChoice] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
     const [products, setProducts] = useState<Product[]>([]);
     const [filteredItems, setFilteredItems] = useState<Product[]>([]);
     const [bucketIndex, setBucketIndex] = useState(0);
@@ -123,38 +170,77 @@ const HomeScreen = () => {
     // Adding a scale animation for item entrance
     const entryAnim = useRef(new Animated.Value(0.9)).current;
 
+    // Add a state variable to track whether there are more products to load
+    const [hasMoreProducts, setHasMoreProducts] = useState<boolean>(true);
+
+    // Add a state to track loaded item IDs
+    const [loadedItemIds, setLoadedItemIds] = useState<Set<string>>(new Set());
+
+    // Refs
+    const swiper = useRef<Swiper>(null);
+    const scrollY = useRef(new Animated.Value(0)).current;
+
     // Navigation handler for ImageTest screen
     const navigateToImageTest = () => {
         navigation.navigate('ImageTest');
     };
 
-    // Fetch products from the database
+    // Load products from database - add debugging logs
     useEffect(() => {
         const loadProducts = async () => {
             try {
+                console.log("HomeScreen: Starting to load products");
                 setIsLoading(true);
-                const fetchedProducts = await ProductService.getProducts({ sortBy: 'sustainability', limit: 10 });
 
-                if (!fetchedProducts || fetchedProducts.length === 0) {
-                    console.log('No products returned from API, using fallback data');
-                    // Use fallback if no products
-                    setFilteredItems(getFallbackProducts());
+                // Try to load a smaller batch of products first (limit to 10)
+                const productService = ProductService;
+                console.log("HomeScreen: Calling ProductService.getProducts");
+                const data = await productService.getProducts({
+                    limit: 10 // Reduced from 20 to 10
+                });
+
+                console.log("HomeScreen: ProductService response received:",
+                    "Data exists:", !!data,
+                    "Length:", data ? data.length : 0);
+
+                if (data && data.length > 0) {
+                    console.log("HomeScreen: Setting products from API data");
+                    // Track the IDs of initially loaded products
+                    const initialIds = new Set(data.map(p => p.id));
+                    setLoadedItemIds(initialIds);
+                    setProducts(data);
+                    setFilteredItems(data);
                 } else {
-                    console.log(`Loaded ${fetchedProducts.length} products from API`);
-                    setProducts(fetchedProducts);
-                    setFilteredItems(fetchedProducts);
+                    console.log("HomeScreen: No products from API, trying featuredProducts");
+                    // Only use featured products as fallback if direct query fails
+                    await getFeaturedProducts(10); // Reduced limit
                 }
             } catch (error) {
-                console.error('Error fetching products:', error);
-                // Use fallback data if fetch fails
-                setFilteredItems(getFallbackProducts());
+                console.error('HomeScreen: Error loading products:', error);
+                // Use fallback data if database fails
+                console.log("HomeScreen: Using fallback data");
+                const fallbackData = getFallbackProducts();
+                // Track fallback product IDs
+                const initialIds = new Set(fallbackData.map(p => p.id));
+                setLoadedItemIds(initialIds);
+                setProducts(fallbackData);
+                setFilteredItems(fallbackData);
             } finally {
                 setIsLoading(false);
             }
         };
 
         loadProducts();
+        // Only run once on component mount, not on every featured products change
     }, []);
+
+    // Use featured products only when they're available and we don't already have products
+    useEffect(() => {
+        if (featuredProducts && featuredProducts.length > 0 && (!products.length || products.length === 0)) {
+            setProducts(featuredProducts);
+            setFilteredItems(featuredProducts);
+        }
+    }, [featuredProducts, products.length]);
 
     // Helper function to get fallback products
     const getFallbackProducts = (): Product[] => {
@@ -245,15 +331,117 @@ const HomeScreen = () => {
             useNativeDriver: true,
         }).start(() => {
             setShowGoodChoice(true);
-            setTimeout(() => {
-                setShowGoodChoice(false);
-                setCurrentIndex(prevIndex => prevIndex + 1);
-                position.setValue({ x: 0, y: 0 });
-                entryAnim.setValue(0.9);
-            }, 1200);
+            // Remove the timeout that automatically closes the good choice screen
+            // The screen will now stay visible until user takes an action
         });
     };
 
+    // Move this up before loadMoreProducts
+    // Modify the loadMoreProducts function
+    const fetchMoreProducts = async ({
+        offset = 0,
+        limit = 20,
+        searchQuery = '',
+    }: {
+        offset?: number;
+        limit?: number;
+        searchQuery?: string;
+    }) => {
+        try {
+            console.log(`fetchMoreProducts called with offset: ${offset}, limit: ${limit}, search: ${searchQuery}`);
+
+            // Construct filters object for API call
+            const filters: ProductFilters = {
+                offset,
+                limit,
+            };
+
+            // Add search query if provided
+            if (searchQuery?.trim()) {
+                filters.searchQuery = searchQuery;
+            }
+
+            // Call the API directly
+            const data = await ProductService.getProducts(filters);
+
+            if (data && data.length > 0) {
+                console.log(`API returned ${data.length} products`);
+                return data;
+            } else {
+                console.log('API returned no data');
+                return [];
+            }
+        } catch (error) {
+            console.error('Error in fetchMoreProducts:', error);
+            // Return fallback data in case of error
+            return getFallbackData().slice(offset, offset + limit);
+        }
+    };
+
+    // This should now be after fetchMoreProducts
+    const loadMoreProducts = useCallback(async () => {
+        if (!hasMoreProducts || isLoading) return;
+
+        try {
+            // Calculate the proper offset based on total items
+            const offset = loadedItemIds.size;
+            console.log(`Loading more products. Current loaded items: ${filteredItems.length}, Total unique IDs: ${loadedItemIds.size}`);
+
+            setIsLoading(true);
+
+            // Fetch the next batch of products with an increased limit to account for potential duplicates
+            const fetchLimit = 20; // Request more to account for duplicates
+            console.log(`Fetching more products with offset: ${offset}, limit: ${fetchLimit}`);
+
+            const newProducts = await fetchMoreProducts({
+                offset,
+                limit: fetchLimit,
+                searchQuery: searchQuery,
+                // Could add more filters here if needed
+            });
+
+            if (!newProducts || newProducts.length === 0) {
+                console.log('No more products available');
+                setHasMoreProducts(false);
+                return;
+            }
+
+            console.log(`Fetched ${newProducts.length} new products`);
+
+            // Filter out products we've already loaded to prevent duplicates
+            const uniqueNewProducts = newProducts.filter(product => !loadedItemIds.has(product.id));
+            console.log(`After filtering duplicates: ${uniqueNewProducts.length} unique products`);
+
+            if (uniqueNewProducts.length === 0) {
+                console.log('No new unique products found, stopping pagination');
+                setHasMoreProducts(false);
+                return;
+            }
+
+            // Update our loaded item IDs
+            const newLoadedItems = new Set(loadedItemIds);
+            uniqueNewProducts.forEach(product => newLoadedItems.add(product.id));
+            setLoadedItemIds(newLoadedItems);
+
+            // Update our list with the new products
+            setProducts(prevProducts => [...prevProducts, ...uniqueNewProducts]);
+
+            // Check if we should stop pagination
+            const receivedLessThanRequested = uniqueNewProducts.length < fetchLimit / 2;
+            if (receivedLessThanRequested) {
+                console.log('Received fewer items than requested, may be at the end');
+                setHasMoreProducts(false);
+            }
+
+        } catch (error) {
+            console.error('Error loading more products:', error);
+            setHasMoreProducts(false);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [hasMoreProducts, isLoading, filteredItems.length, loadedItemIds, searchQuery]);
+
+    // Modify swipeLeft and swipeRight to fetch more data when needed
     const swipeLeft = () => {
         // Skip this item
         Animated.timing(position, {
@@ -261,6 +449,11 @@ const HomeScreen = () => {
             duration: animation.normal,
             useNativeDriver: true,
         }).start(() => {
+            // Check if we're near the end and need to load more data
+            if (currentIndex >= filteredItems.length - 3) {
+                loadMoreProducts();
+            }
+
             setCurrentIndex(prevIndex => prevIndex + 1);
             position.setValue({ x: 0, y: 0 });
             entryAnim.setValue(0.9);
@@ -344,36 +537,44 @@ const HomeScreen = () => {
     };
 
     const renderCard = () => {
-        if (isLoading) {
+        if (currentIndex >= filteredItems.length) {
+            if (!hasMoreProducts) {
+                // Show "You've reached the end" message
+                return (
+                    <View style={styles.cardContainer}>
+                        <View style={[styles.card, { backgroundColor: colors.neutral.white }]}>
+                            <View style={styles.emptyStateContainer}>
+                                <Text style={[styles.emptyStateTitle, { color: colors.neutral.darkGray }]}>
+                                    You've seen all items
+                                </Text>
+                                <Text style={[styles.emptyStateTitle, { color: colors.neutral.mediumGray, fontSize: typography.fontSize.md }]}>
+                                    Check back later for more recommendations or try different filters
+                                </Text>
+                                <TouchableOpacity
+                                    style={[styles.resetButton, { backgroundColor: colors.primary.main, marginTop: spacing.lg }]}
+                                    onPress={() => setCurrentIndex(0)}
+                                >
+                                    <Text style={{ color: 'white', fontWeight: 'bold' }}>Start Over</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                );
+            }
+
+            // Show loading indicator while fetching more
+            if (!isLoading) {
+                loadMoreProducts();
+            }
+
             return (
                 <View style={styles.cardContainer}>
                     <View style={[styles.card, { backgroundColor: colors.neutral.white }]}>
                         <View style={styles.emptyStateContainer}>
                             <ActivityIndicator size="large" color={colors.primary.main} />
                             <Text style={[styles.emptyStateTitle, { color: colors.neutral.darkGray, marginTop: spacing.md }]}>
-                                Loading products...
+                                Loading more products...
                             </Text>
-                        </View>
-                    </View>
-                </View>
-            );
-        }
-
-        if (currentIndex >= filteredItems.length || !filteredItems[currentIndex]) {
-            // No more items to show or current item is undefined
-            return (
-                <View style={styles.cardContainer}>
-                    <View style={[styles.card, { backgroundColor: colors.neutral.white }]}>
-                        <View style={styles.emptyStateContainer}>
-                            <Ionicons name="checkmark-circle-outline" size={80} color={colors.primary.main} />
-                            <Text style={styles.emptyStateTitle}>You've seen all items!</Text>
-                            <Text style={styles.emptyStateSubtitle}>Check back later for more sustainable products</Text>
-                            <TouchableOpacity
-                                style={[styles.resetButton, { backgroundColor: colors.primary.main, marginTop: 24 }]}
-                                onPress={() => setCurrentIndex(0)}
-                            >
-                                <Text style={{ color: 'white', fontWeight: 'bold' }}>Start Over</Text>
-                            </TouchableOpacity>
                         </View>
                     </View>
                 </View>
@@ -385,19 +586,20 @@ const HomeScreen = () => {
         // Ensure item exists
         if (!item) {
             console.error('Item is undefined at index', currentIndex);
+
+            // Instead of showing an error, just move to the next item
+            setTimeout(() => {
+                setCurrentIndex(prevIndex => prevIndex + 1);
+            }, 100);
+
             return (
                 <View style={styles.cardContainer}>
                     <View style={[styles.card, { backgroundColor: colors.neutral.white }]}>
                         <View style={styles.emptyStateContainer}>
-                            <Ionicons name="alert-circle-outline" size={80} color={colors.semantic.error} />
-                            <Text style={styles.emptyStateTitle}>Item Error</Text>
-                            <Text style={styles.emptyStateSubtitle}>There was a problem loading this item</Text>
-                            <TouchableOpacity
-                                style={[styles.resetButton, { backgroundColor: colors.primary.main, marginTop: 24 }]}
-                                onPress={() => setCurrentIndex(currentIndex + 1)}
-                            >
-                                <Text style={{ color: 'white', fontWeight: 'bold' }}>Skip This Item</Text>
-                            </TouchableOpacity>
+                            <ActivityIndicator size="large" color={colors.primary.main} />
+                            <Text style={[styles.emptyStateTitle, { color: colors.neutral.darkGray, marginTop: spacing.md }]}>
+                                Loading next item...
+                            </Text>
                         </View>
                     </View>
                 </View>
@@ -476,10 +678,7 @@ const HomeScreen = () => {
             >
                 {/* Header with Logo and Icons */}
                 <View style={styles.cardHeader}>
-                    <Image
-                        source={{ uri: 'https://placehold.co/100x40/00C78C/FFFFFF?text=GreenSwap' }}
-                        style={styles.logo}
-                    />
+                    <Logo size="large" />
                     <View style={styles.headerIcons}>
                         <TouchableOpacity style={styles.iconButton}>
                             <Ionicons name="notifications-outline" size={24} color={colors.neutral.charcoal} />
@@ -499,12 +698,15 @@ const HomeScreen = () => {
                             style={styles.itemImage}
                             onError={handleImageError}
                         >
-                            {/* Seller info (positioned at top of image) */}
+                            {/* Seller info (positioned at top of image)
                             <BlurView
-                                intensity={80}
+                                intensity={100}
                                 style={[
                                     styles.sellerContainer,
-                                    { borderRadius: borderRadius.lg }
+                                    {
+                                        borderRadius: 24,
+                                        overflow: 'hidden',
+                                    }
                                 ]}
                             >
                                 <View style={styles.sellerInfo}>
@@ -517,12 +719,12 @@ const HomeScreen = () => {
                                     </Text>
                                 </View>
                                 <View style={styles.ratingContainer}>
-                                    <Ionicons name="star" size={18} color={colors.accent.beige} />
+                                    <Ionicons name="star" size={18} color={colors.neutral.darkGray} />
                                     <Text style={[styles.ratingText, { color: colors.neutral.charcoal }]}>
                                         4.5
                                     </Text>
                                 </View>
-                            </BlurView>
+                            </BlurView> */}
 
                             {/* Sustainability score badge */}
                             <BlurView
@@ -670,18 +872,6 @@ const HomeScreen = () => {
                         <Ionicons name="close" size={26} color={colors.neutral.white} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary.main }]} onPress={handleSearchPress}>
-                        <Ionicons name="grid-outline" size={26} color={colors.neutral.white} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.semantic.error }]} onPress={handleChatPress}>
-                        <Ionicons name="chatbubble-outline" size={26} color={colors.neutral.white} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.neutral.lightGray }]} onPress={() => navigation.navigate('Saved')}>
-                        <Ionicons name="bookmark-outline" size={26} color={colors.neutral.darkGray} />
-                    </TouchableOpacity>
-
                     <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary.main }]} onPress={swipeRight}>
                         <Ionicons name="heart-outline" size={26} color={colors.neutral.white} />
                     </TouchableOpacity>
@@ -690,6 +880,7 @@ const HomeScreen = () => {
         );
     };
 
+    // Modify the renderGoodChoiceScreen to include buttons for continuing
     const renderGoodChoiceScreen = () => {
         return (
             <View style={[styles.goodChoiceContainer, { backgroundColor: colors.neutral.white, ...shadows.xl }]}>
@@ -719,7 +910,12 @@ const HomeScreen = () => {
                                 backgroundColor: `${colors.semantic.error}10`
                             }
                         ]}
-                        onPress={swipeLeft}
+                        onPress={() => {
+                            setShowGoodChoice(false);
+                            setCurrentIndex(prevIndex => prevIndex + 1);
+                            position.setValue({ x: 0, y: 0 });
+                            entryAnim.setValue(0.9);
+                        }}
                     >
                         <Ionicons name="close" size={30} color={colors.semantic.error} />
                     </TouchableOpacity>
@@ -732,7 +928,13 @@ const HomeScreen = () => {
                                 backgroundColor: `${colors.semantic.error}10`
                             }
                         ]}
-                        onPress={handleChatPress}
+                        onPress={() => {
+                            handleChatPress();
+                            setShowGoodChoice(false);
+                            setCurrentIndex(prevIndex => prevIndex + 1);
+                            position.setValue({ x: 0, y: 0 });
+                            entryAnim.setValue(0.9);
+                        }}
                     >
                         <Ionicons name="chatbubble-outline" size={30} color={colors.semantic.error} />
                     </TouchableOpacity>
@@ -745,7 +947,13 @@ const HomeScreen = () => {
                                 backgroundColor: `${colors.primary.main}10`
                             }
                         ]}
-                        onPress={() => navigation.navigate('Saved')}
+                        onPress={() => {
+                            navigation.navigate('Saved');
+                            setShowGoodChoice(false);
+                            setCurrentIndex(prevIndex => prevIndex + 1);
+                            position.setValue({ x: 0, y: 0 });
+                            entryAnim.setValue(0.9);
+                        }}
                     >
                         <Ionicons name="cart-outline" size={30} color={colors.primary.main} />
                     </TouchableOpacity>
@@ -767,12 +975,12 @@ const HomeScreen = () => {
             <StatusBar style="dark" />
 
             {/* Test Images Button */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
                 style={[styles.testImagesButton, { backgroundColor: colors.primary.main }]}
                 onPress={navigateToImageTest}
             >
                 <Text style={styles.testImagesButtonText}>Test Images</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {/* Search Bar */}
             <View style={[styles.searchContainer, { backgroundColor: colors.neutral.offWhite }]}>
@@ -821,7 +1029,7 @@ const HomeScreen = () => {
             </View>
         </SafeAreaView>
     );
-};
+});
 
 const styles = StyleSheet.create({
     container: {
@@ -888,7 +1096,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 12,
         paddingVertical: 8,
-        backgroundColor: 'rgba(255,255,255,0.4)',
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 24,
+        // borderBottomLeftRadius: 32,
+        // borderBottomRightRadius: 32,
     },
     sellerAvatar: {
         width: 32,
@@ -1141,7 +1352,7 @@ const styles = StyleSheet.create({
         width: '100%',
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
+        paddingHorizontal: 20,
         paddingVertical: 12,
     },
     searchInputContainer: {
@@ -1238,6 +1449,43 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
         fontSize: 14,
+    },
+    cardImageContainer: {
+        flex: 1,
+        position: 'relative',
+    },
+    cardImage: {
+        width: '100%',
+        height: '100%',
+    },
+    productInfo: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: 20,
+    },
+    productBasicInfo: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    productName: {
+        fontWeight: '700',
+        marginBottom: 8,
+    },
+    productPrice: {
+        fontWeight: '700',
+    },
+    detailsContainer: {
+        flex: 1,
+        padding: 20,
+    },
+    detailsContent: {
+        flex: 1,
+    },
+    sustainabilityMetrics: {
+        // Placeholder for sustainability metrics
     },
 });
 

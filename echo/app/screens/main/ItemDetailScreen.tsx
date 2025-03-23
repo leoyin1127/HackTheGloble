@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -8,65 +8,74 @@ import {
     ScrollView,
     Dimensions,
     Share,
-    Alert
+    Alert,
+    ActivityIndicator
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/AppNavigator';
+import ProductService, { Product } from '../../services/ProductService';
+import { useTheme } from '../../context/ThemeContext';
+import api from '../../utils/api';
 
 type ItemDetailScreenNavigationProp = StackNavigationProp<MainStackParamList, 'ItemDetail'>;
 type ItemDetailScreenRouteProp = RouteProp<MainStackParamList, 'ItemDetail'>;
 
 const { width } = Dimensions.get('window');
 
-// Mock data for a single item
-const ITEM = {
-    id: '1',
-    title: 'Vintage Denim Jacket',
-    price: '$45.00',
-    discountedPrice: '$39.99',
-    images: [
-        'https://placehold.co/600x800/E0F7FA/2C3E50?text=Denim+Jacket+1',
-        'https://placehold.co/600x800/E0F7FA/2C3E50?text=Denim+Jacket+2',
-        'https://placehold.co/600x800/E0F7FA/2C3E50?text=Denim+Jacket+3',
-    ],
-    description: 'Authentic vintage denim jacket from the 90s in excellent condition. Features classic styling with button front closure and front flap pockets. Perfect for layering in any season.',
-    condition: 'Excellent',
-    brand: 'Levi\'s',
-    size: 'Medium',
-    material: '100% Cotton Denim',
-    color: 'Medium Wash Blue',
-    sustainabilityInfo: {
-        impact: 'Buying this pre-owned item reduces water usage by approximately 1,680 gallons compared to a new jacket.',
-        certifications: ['Second-Hand Certified', 'Quality Verified'],
-        condition: '9/10 - Minimal wear, no visible flaws',
-    },
-    seller: {
-        id: 'seller123',
-        name: 'EcoFashion',
-        rating: 4.8,
-        totalRatings: 156,
-        location: 'Toronto, Canada',
-    },
-    shipping: {
-        options: [
-            { method: 'Standard', price: '$4.99', time: '5-7 days' },
-            { method: 'Express', price: '$9.99', time: '2-3 days' },
-        ],
-        returns: '30-day returns accepted',
-    }
-};
-
 const ItemDetailScreen = () => {
     const navigation = useNavigation<ItemDetailScreenNavigationProp>();
     const route = useRoute<ItemDetailScreenRouteProp>();
     const { itemId } = route.params;
+    const { colors, typography, borderRadius, shadows } = useTheme();
 
+    const [product, setProduct] = useState<Product | null>(null);
+    const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [quantity, setQuantity] = useState(1);
     const [selectedShippingIndex, setSelectedShippingIndex] = useState(0);
+
+    // Fetch product data from database
+    useEffect(() => {
+        const fetchProductData = async () => {
+            try {
+                setLoading(true);
+
+                // Get product details
+                const productData = await ProductService.getProductDetails(itemId);
+
+                if (!productData) {
+                    setError('Product not found');
+                    setLoading(false);
+                    return;
+                }
+
+                setProduct(productData);
+
+                // Also fetch related products
+                if (productData.master_category) {
+                    const relatedData = await ProductService.getRelatedProducts(
+                        itemId,
+                        productData.master_category
+                    );
+                    setRelatedProducts(relatedData);
+                }
+
+            } catch (err) {
+                console.error('Error fetching product:', err);
+                setError('Failed to load product details');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchProductData();
+    }, [itemId]);
 
     const incrementQuantity = () => {
         setQuantity(prev => prev + 1);
@@ -79,9 +88,11 @@ const ItemDetailScreen = () => {
     };
 
     const handleAddToCart = () => {
+        if (!product) return;
+
         Alert.alert(
             'Added to Cart',
-            `${ITEM.title} (Qty: ${quantity}) has been added to your cart.`,
+            `${product.title} (Qty: ${quantity}) has been added to your cart.`,
             [
                 {
                     text: 'Continue Shopping',
@@ -100,17 +111,53 @@ const ItemDetailScreen = () => {
     };
 
     const handleShare = async () => {
+        if (!product) return;
+
         try {
             await Share.share({
-                message: `Check out this sustainable find: ${ITEM.title} for ${ITEM.price}!`,
-                url: 'https://sustainablemarketplace.app/item/' + ITEM.id,
+                message: `Check out this sustainable find: ${product.title} for $${product.price}!`,
+                url: 'https://sustainablemarketplace.app/item/' + product.id,
             });
         } catch (error) {
             Alert.alert('Error', 'Could not share this item');
         }
     };
 
+    const handleChat = () => {
+        if (!product) return;
+
+        navigation.navigate('Chat', {
+            sellerId: product.seller_id,
+            itemId: product.id
+        });
+    };
+
+    const getProductImages = (): string[] => {
+        if (!product) return [];
+
+        // Handle different image formats
+        if (product.images && product.images.length > 0) {
+            return product.images.map(img => {
+                // If already a full URL, return as is
+                if (typeof img === 'string' && img.startsWith('http')) {
+                    return img;
+                }
+                // Otherwise prefix with API URL if it's a relative path
+                else if (typeof img === 'string' && img.startsWith('/')) {
+                    return api.getUrl(img);
+                }
+                // Fallback
+                return 'https://placehold.co/600x800/E0F7FA/2C3E50?text=No+Image';
+            });
+        }
+
+        // Fallback
+        return ['https://placehold.co/600x800/E0F7FA/2C3E50?text=No+Image'];
+    };
+
     const renderImageCarousel = () => {
+        const images = getProductImages();
+
         return (
             <View style={styles.carouselContainer}>
                 <ScrollView
@@ -122,7 +169,7 @@ const ItemDetailScreen = () => {
                         setActiveImageIndex(newIndex);
                     }}
                 >
-                    {ITEM.images.map((image, index) => (
+                    {images.map((image, index) => (
                         <Image
                             key={index}
                             source={{ uri: image }}
@@ -133,7 +180,7 @@ const ItemDetailScreen = () => {
                 </ScrollView>
 
                 <View style={styles.paginationContainer}>
-                    {ITEM.images.map((_, index) => (
+                    {images.map((_, index) => (
                         <View
                             key={index}
                             style={[
@@ -146,6 +193,32 @@ const ItemDetailScreen = () => {
             </View>
         );
     };
+
+    if (loading) {
+        return (
+            <SafeAreaView style={[styles.container, styles.loadingContainer]}>
+                <StatusBar style="dark" />
+                <ActivityIndicator size="large" color={colors.primary.main} />
+                <Text style={styles.loadingText}>Loading product details...</Text>
+            </SafeAreaView>
+        );
+    }
+
+    if (error || !product) {
+        return (
+            <SafeAreaView style={[styles.container, styles.errorContainer]}>
+                <StatusBar style="dark" />
+                <Ionicons name="alert-circle-outline" size={60} color={colors.semantic.error} />
+                <Text style={styles.errorText}>{error || 'Product not found'}</Text>
+                <TouchableOpacity
+                    style={styles.backToHomeButton}
+                    onPress={() => navigation.navigate('Home')}
+                >
+                    <Text style={styles.backToHomeText}>Back to Home</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -172,66 +245,90 @@ const ItemDetailScreen = () => {
 
                 <View style={styles.contentContainer}>
                     <View style={styles.titleContainer}>
-                        <Text style={styles.title}>{ITEM.title}</Text>
+                        <Text style={styles.title}>{product.title}</Text>
 
-                        <View style={styles.priceContainer}>
-                            <Text style={styles.discountedPrice}>{ITEM.discountedPrice}</Text>
-                            <Text style={styles.originalPrice}>{ITEM.price}</Text>
+                        <View style={styles.productHeader}>
+                            <View style={styles.priceContainer}>
+                                <Text style={styles.price}>${product.price.toFixed(2)}</Text>
+                            </View>
+                            <View style={styles.ratingsContainer}>
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <Ionicons
+                                        key={star}
+                                        name="star"
+                                        size={18}
+                                        color={star <= 4 ? colors.accent.beige : colors.neutral.lightGray}
+                                    />
+                                ))}
+                                <Text style={styles.reviewCount}>(20 reviews)</Text>
+                            </View>
                         </View>
                     </View>
 
                     <View style={styles.tagsContainer}>
                         <View style={styles.tag}>
-                            <Text style={styles.tagText}>{ITEM.condition}</Text>
+                            <Text style={styles.tagText}>{product.condition}</Text>
                         </View>
                         <View style={styles.tag}>
-                            <Text style={styles.tagText}>{ITEM.size}</Text>
+                            <Text style={styles.tagText}>{product.size}</Text>
                         </View>
                         <View style={styles.tag}>
-                            <Text style={styles.tagText}>{ITEM.brand}</Text>
+                            <Text style={styles.tagText}>{product.brand}</Text>
                         </View>
                     </View>
 
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Description</Text>
-                        <Text style={styles.descriptionText}>{ITEM.description}</Text>
+                        <Text style={styles.descriptionText}>{product.description}</Text>
                     </View>
 
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Item Details</Text>
                         <View style={styles.detailItem}>
                             <Text style={styles.detailLabel}>Brand:</Text>
-                            <Text style={styles.detailValue}>{ITEM.brand}</Text>
+                            <Text style={styles.detailValue}>{product.brand}</Text>
                         </View>
                         <View style={styles.detailItem}>
                             <Text style={styles.detailLabel}>Size:</Text>
-                            <Text style={styles.detailValue}>{ITEM.size}</Text>
+                            <Text style={styles.detailValue}>{product.size}</Text>
                         </View>
                         <View style={styles.detailItem}>
                             <Text style={styles.detailLabel}>Material:</Text>
-                            <Text style={styles.detailValue}>{ITEM.material}</Text>
+                            <Text style={styles.detailValue}>{product.material}</Text>
                         </View>
                         <View style={styles.detailItem}>
                             <Text style={styles.detailLabel}>Color:</Text>
-                            <Text style={styles.detailValue}>{ITEM.color}</Text>
+                            <Text style={styles.detailValue}>{product.color}</Text>
                         </View>
                         <View style={styles.detailItem}>
                             <Text style={styles.detailLabel}>Condition:</Text>
-                            <Text style={styles.detailValue}>{ITEM.condition}</Text>
+                            <Text style={styles.detailValue}>{product.condition}</Text>
                         </View>
                     </View>
 
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Sustainability Impact</Text>
                         <View style={styles.sustainabilityBox}>
-                            <Text style={styles.sustainabilityText}>{ITEM.sustainabilityInfo.impact}</Text>
+                            {product.sustainability_info && product.sustainability_info.impact ? (
+                                <Text style={styles.sustainabilityText}>{product.sustainability_info.impact}</Text>
+                            ) : (
+                                <Text style={styles.sustainabilityText}>
+                                    This item has a sustainability score of {product.sustainability}. Higher is better.
+                                </Text>
+                            )}
                         </View>
                         <View style={styles.certificationsContainer}>
-                            {ITEM.sustainabilityInfo.certifications.map((cert, index) => (
-                                <View key={index} style={styles.certificationTag}>
-                                    <Text style={styles.certificationText}>{cert}</Text>
-                                </View>
-                            ))}
+                            {product.sustainability_info && product.sustainability_info.certifications ?
+                                product.sustainability_info.certifications.map((cert, index) => (
+                                    <View key={index} style={styles.certificationTag}>
+                                        <Text style={styles.certificationText}>{cert}</Text>
+                                    </View>
+                                ))
+                                : product.sustainability_badges && product.sustainability_badges.map((badge, index) => (
+                                    <View key={index} style={styles.certificationTag}>
+                                        <Text style={styles.certificationText}>{badge}</Text>
+                                    </View>
+                                ))}
                         </View>
                     </View>
 
@@ -239,13 +336,17 @@ const ItemDetailScreen = () => {
                         <Text style={styles.sectionTitle}>Seller Information</Text>
                         <View style={styles.sellerContainer}>
                             <View style={styles.sellerInfo}>
-                                <Text style={styles.sellerName}>{ITEM.seller.name}</Text>
+                                <Text style={styles.sellerName}>
+                                    {product.sellerName || 'Unknown Seller'}
+                                </Text>
                                 <View style={styles.ratingContainer}>
                                     <Text style={styles.ratingText}>
-                                        ★ {ITEM.seller.rating} ({ITEM.seller.totalRatings} reviews)
+                                        ★ 4.5 (10 reviews)
                                     </Text>
                                 </View>
-                                <Text style={styles.sellerLocation}>{ITEM.seller.location}</Text>
+                                <Text style={styles.sellerLocation}>
+                                    Local
+                                </Text>
                             </View>
                             <TouchableOpacity style={styles.contactButton}>
                                 <Text style={styles.contactButtonText}>Contact</Text>
@@ -256,27 +357,34 @@ const ItemDetailScreen = () => {
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Shipping</Text>
                         <View style={styles.shippingOptions}>
-                            {ITEM.shipping.options.map((option, index) => (
-                                <TouchableOpacity
-                                    key={index}
-                                    style={[
-                                        styles.shippingOption,
-                                        selectedShippingIndex === index && styles.selectedShippingOption
-                                    ]}
-                                    onPress={() => setSelectedShippingIndex(index)}
-                                >
-                                    <View style={styles.radioButton}>
-                                        {selectedShippingIndex === index && <View style={styles.radioButtonInner} />}
-                                    </View>
-                                    <View style={styles.shippingOptionDetails}>
-                                        <Text style={styles.shippingMethod}>{option.method}</Text>
-                                        <Text style={styles.shippingTime}>{option.time}</Text>
-                                    </View>
-                                    <Text style={styles.shippingPrice}>{option.price}</Text>
-                                </TouchableOpacity>
-                            ))}
+                            <TouchableOpacity
+                                style={[
+                                    styles.shippingOption,
+                                    selectedShippingIndex === 0 && styles.selectedShippingOption
+                                ]}
+                                onPress={() => setSelectedShippingIndex(0)}
+                            >
+                                <View style={styles.shippingOptionInfo}>
+                                    <Text style={styles.shippingOptionTitle}>Standard Shipping</Text>
+                                    <Text style={styles.shippingOptionDelivery}>3-5 business days</Text>
+                                </View>
+                                <Text style={styles.shippingOptionPrice}>$4.99</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.shippingOption,
+                                    selectedShippingIndex === 1 && styles.selectedShippingOption
+                                ]}
+                                onPress={() => setSelectedShippingIndex(1)}
+                            >
+                                <View style={styles.shippingOptionInfo}>
+                                    <Text style={styles.shippingOptionTitle}>Express Shipping</Text>
+                                    <Text style={styles.shippingOptionDelivery}>1-2 business days</Text>
+                                </View>
+                                <Text style={styles.shippingOptionPrice}>$9.99</Text>
+                            </TouchableOpacity>
                         </View>
-                        <Text style={styles.returnsText}>{ITEM.shipping.returns}</Text>
                     </View>
 
                     <View style={styles.quantityContainer}>
@@ -394,19 +502,28 @@ const styles = StyleSheet.create({
         flex: 1,
         marginRight: 10,
     },
+    productHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 15,
+    },
     priceContainer: {
         alignItems: 'flex-end',
     },
-    discountedPrice: {
+    price: {
         fontSize: 22,
         fontWeight: 'bold',
         color: '#45B69C',
     },
-    originalPrice: {
-        fontSize: 16,
-        color: '#95A5A6',
-        textDecorationLine: 'line-through',
-        marginTop: 3,
+    ratingsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    reviewCount: {
+        fontSize: 14,
+        color: '#7F8C8D',
+        marginLeft: 5,
     },
     tagsContainer: {
         flexDirection: 'row',
@@ -486,7 +603,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         backgroundColor: '#F9F9F9',
-        borderRadius: 10,
+        borderRadius: 24,
         padding: 15,
     },
     sellerInfo: {
@@ -534,44 +651,23 @@ const styles = StyleSheet.create({
     selectedShippingOption: {
         backgroundColor: '#F9F9F9',
     },
-    radioButton: {
-        width: 18,
-        height: 18,
-        borderRadius: 9,
-        borderWidth: 2,
-        borderColor: '#45B69C',
-        marginRight: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    radioButtonInner: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: '#45B69C',
-    },
-    shippingOptionDetails: {
+    shippingOptionInfo: {
         flex: 1,
     },
-    shippingMethod: {
+    shippingOptionTitle: {
         fontSize: 15,
         fontWeight: '500',
         color: '#2C3E50',
     },
-    shippingTime: {
+    shippingOptionDelivery: {
         fontSize: 13,
         color: '#7F8C8D',
         marginTop: 2,
     },
-    shippingPrice: {
+    shippingOptionPrice: {
         fontSize: 15,
         fontWeight: 'bold',
         color: '#2C3E50',
-    },
-    returnsText: {
-        fontSize: 14,
-        color: '#7F8C8D',
-        marginTop: 10,
     },
     quantityContainer: {
         flexDirection: 'row',
@@ -646,6 +742,34 @@ const styles = StyleSheet.create({
         backgroundColor: '#45B69C',
     },
     buyNowButtonText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+    },
+    loadingContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        fontSize: 16,
+        color: '#2C3E50',
+        marginTop: 20,
+    },
+    errorContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    errorText: {
+        fontSize: 16,
+        color: '#2C3E50',
+        marginTop: 20,
+    },
+    backToHomeButton: {
+        backgroundColor: '#45B69C',
+        padding: 15,
+        borderRadius: 5,
+    },
+    backToHomeText: {
         fontSize: 16,
         fontWeight: 'bold',
         color: '#FFFFFF',

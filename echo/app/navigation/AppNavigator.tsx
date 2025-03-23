@@ -178,7 +178,7 @@ const getIconName = (routeName: string, isFocused: boolean): any => {
     if (routeName === 'Home') {
         iconName = isFocused ? 'home' : 'home-outline';
     } else if (routeName === 'Discover') {
-        iconName = isFocused ? 'compass' : 'compass-outline';
+        iconName = isFocused ? 'grid' : 'grid-outline';
     } else if (routeName === 'Messages') {
         iconName = isFocused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline';
     } else if (routeName === 'Profile') {
@@ -290,7 +290,7 @@ const AppNavigator = () => {
 const styles = StyleSheet.create({
     tabBarContainer: {
         position: 'absolute',
-        bottom: 0,
+        bottom: -8,
         left: 0,
         right: 0,
         paddingHorizontal: 24,

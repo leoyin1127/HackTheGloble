@@ -338,7 +338,7 @@ const ChatListScreen = () => {
                         paddingVertical: spacing.md,
                     }
                 ]}>
-                    <Logo size="small" />
+                    <Logo size="large" />
 
                     <View style={styles.headerIcons}>
                         <TouchableOpacity
@@ -453,7 +453,7 @@ const ChatListScreen = () => {
             <FlatList
                 data={filteredChats}
                 renderItem={renderChatItem}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
                 contentContainerStyle={{
                     paddingTop: spacing.md,
                     paddingBottom: spacing.xxxl,

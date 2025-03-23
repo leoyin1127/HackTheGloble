@@ -963,7 +963,7 @@ const ChatScreen = () => {
                 <SectionList
                     ref={sectionListRef}
                     sections={messageGroups}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item, index) => `${item.id}-${index}`}
                     renderItem={renderMessage}
                     renderSectionHeader={renderMessageSection}
                     contentContainerStyle={[

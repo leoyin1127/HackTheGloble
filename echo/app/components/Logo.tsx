@@ -1,7 +1,15 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
-import PlaceholderImage from './PlaceholderImage';
+
+// Try to import SVG if available
+let LogoSvg: React.ComponentType<any> | null = null;
+try {
+    // Dynamic import to prevent errors if SVG support is not configured
+    LogoSvg = require('../../assets/logo.svg').default;
+} catch (error) {
+    console.log('SVG import failed, using PNG fallback');
+}
 
 interface LogoProps {
     size?: 'small' | 'medium' | 'large';
@@ -28,18 +36,29 @@ const Logo = ({ size = 'medium', showText = true }: LogoProps) => {
 
     return (
         <View style={styles.container}>
-            {/* <PlaceholderImage
-                type="category" // Using category type for the logo
-                width={logoSize}
-                height={logoSize}
-                borderRadius={logoSize / 2}
-                text="Eco"
-                containerStyle={{
-                    backgroundColor: colors.primary.main,
-                }}
-            /> */}
+            {LogoSvg ? (
+                // Use SVG if available
+                <LogoSvg
+                    width={logoSize}
+                    height={logoSize}
+                    style={{
+                        borderRadius: logoSize
+                    }}
+                />
+            ) : (
+                // Fallback to PNG
+                <Image
+                    source={require('../../assets/logo.png')}
+                    style={{
+                        width: logoSize,
+                        height: logoSize,
+                        borderRadius: logoSize / 2
+                    }}
+                    resizeMode="contain"
+                />
+            )}
 
-            {showText && (
+            {/* {showText && (
                 <Text style={[
                     styles.logoText,
                     {
@@ -51,7 +70,7 @@ const Logo = ({ size = 'medium', showText = true }: LogoProps) => {
                     <Text style={{ fontWeight: 'bold' }}>Eco</Text>
                     <Text style={{ fontWeight: '400' }}>Swap</Text>
                 </Text>
-            )}
+            )} */}
         </View>
     );
 };
