@@ -984,21 +984,47 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                                         ))}
                                     </View>
 
-                                    <TouchableOpacity
-                                        style={[styles.chatButton]}
-                                        onPress={handleChatPress}
-                                    >
-                                        <LinearGradient
-                                            colors={[colors.gradients.primary[0], colors.gradients.primary[1]]}
-                                            style={[styles.chatButtonGradient, { borderRadius: borderRadius.lg }]}
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 0 }}
+                                    <View style={styles.detailsButtonsContainer}>
+                                        {/* View Details Button */}
+                                        <TouchableOpacity
+                                            style={[styles.detailButton]}
+                                            onPress={() => navigation.navigate('ItemDetail', { itemId: item.id })}
                                         >
-                                            <Text style={[styles.chatButtonText, { color: colors.neutral.white }]}>
-                                                Chat with Seller
-                                            </Text>
-                                        </LinearGradient>
-                                    </TouchableOpacity>
+                                            <LinearGradient
+                                                colors={[colors.gradients.secondary[0], colors.gradients.secondary[1]]}
+                                                style={[styles.chatButtonGradient, { borderRadius: borderRadius.lg }]}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 0 }}
+                                            >
+                                                <View style={styles.buttonInnerContainer}>
+                                                    <Ionicons name="information-circle-outline" size={20} color={colors.neutral.white} style={{ marginRight: 8 }} />
+                                                    <Text style={[styles.chatButtonText, { color: colors.neutral.white }]}>
+                                                        View Full Details
+                                                    </Text>
+                                                </View>
+                                            </LinearGradient>
+                                        </TouchableOpacity>
+
+                                        {/* Chat Button */}
+                                        <TouchableOpacity
+                                            style={[styles.detailButton]}
+                                            onPress={handleChatPress}
+                                        >
+                                            <LinearGradient
+                                                colors={[colors.gradients.primary[0], colors.gradients.primary[1]]}
+                                                style={[styles.chatButtonGradient, { borderRadius: borderRadius.lg }]}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 0 }}
+                                            >
+                                                <View style={styles.buttonInnerContainer}>
+                                                    <Ionicons name="chatbubble-outline" size={20} color={colors.neutral.white} style={{ marginRight: 8 }} />
+                                                    <Text style={[styles.chatButtonText, { color: colors.neutral.white }]}>
+                                                        Chat with Seller
+                                                    </Text>
+                                                </View>
+                                            </LinearGradient>
+                                        </TouchableOpacity>
+                                    </View>
 
                                     <TouchableOpacity
                                         style={styles.closeDetailsButton}
@@ -1417,8 +1443,11 @@ const styles = StyleSheet.create({
     },
     detailsBlur: {
         flex: 1,
-        padding: 20,
-        backgroundColor: 'rgba(255,255,255,0.8)',
+        padding: 24,
+        paddingTop: 30,
+        backgroundColor: 'rgba(255,255,255,0.85)',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
     },
     detailsHeader: {
         flexDirection: 'row',
@@ -1431,34 +1460,39 @@ const styles = StyleSheet.create({
     detailsTitle: {
         fontWeight: '700',
         flex: 1,
+        fontSize: 20,
     },
     detailsPrice: {
         fontWeight: '700',
+        fontSize: 20,
     },
     description: {
         lineHeight: 22,
         marginBottom: 20,
+        fontSize: 16,
     },
     sustainabilityBadges: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         marginBottom: 24,
+        marginTop: 8,
     },
     badge: {
         paddingHorizontal: 12,
-        paddingVertical: 6,
+        paddingVertical: 8,
         marginRight: 8,
         marginBottom: 8,
+        borderRadius: 16,
     },
     badgeText: {
         fontWeight: '600',
     },
-    chatButton: {
-        marginTop: 'auto',
-    },
     chatButtonGradient: {
         paddingVertical: 16,
         alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        borderRadius: 14,
     },
     chatButtonText: {
         fontSize: 16,
@@ -1468,12 +1502,13 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 10,
         alignSelf: 'center',
-        backgroundColor: 'rgba(0,0,0,0.3)',
+        backgroundColor: 'rgba(0,0,0,0.4)',
         width: 40,
         height: 40,
         borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 10,
     },
     closeButtonBlur: {
         width: 40,
@@ -1896,6 +1931,26 @@ const styles = StyleSheet.create({
         marginLeft: 8,
         fontWeight: '600',
         color: 'white',
+    },
+    detailsButtonsContainer: {
+        flexDirection: 'column',
+        justifyContent: 'center',
+        marginBottom: 20,
+        width: '100%',
+    },
+    detailButton: {
+        width: '100%',
+        marginBottom: 12,
+        borderWidth: 2,
+        borderColor: 'transparent',
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    buttonInnerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });
 

@@ -672,7 +672,7 @@ const SearchScreen = () => {
 
             // Calculate proper offset for pagination
             const offset = loadMore ? results.length : 0;
-            const limit = 15; // Keep consistent limit
+            const limit = 30; // Increased from 15 to 30 for more results per page
 
             console.log(`SearchScreen: Using offset=${offset}, limit=${limit}, current results.length=${results.length}`);
 
@@ -797,9 +797,10 @@ const SearchScreen = () => {
             }
 
             // Determine if there might be more data to load
-            // Only mark as having more data if we got a reasonable number of results
-            setHasMoreData(fetchedProducts.length >= limit * 0.5);
-            console.log(`SearchScreen: Set hasMoreData=${fetchedProducts.length >= limit * 0.5}`);
+            // Only mark as having no more data if we got zero new items
+            // This ensures we continue to try loading more as long as we're still getting results
+            setHasMoreData(fetchedProducts.length > 0);
+            console.log(`SearchScreen: Set hasMoreData=${fetchedProducts.length > 0}`);
 
         } catch (error) {
             console.error(`SearchScreen: Unexpected error in fetchFilteredProducts:`, error);

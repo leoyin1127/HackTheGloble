@@ -348,8 +348,14 @@ const ItemDetailScreen = () => {
                                     Local
                                 </Text>
                             </View>
-                            <TouchableOpacity style={styles.contactButton}>
-                                <Text style={styles.contactButtonText}>Contact</Text>
+                            <TouchableOpacity
+                                style={styles.contactButton}
+                                onPress={handleChat}
+                            >
+                                <View style={styles.contactButtonContent}>
+                                    <Ionicons name="chatbubble-outline" size={16} color="#FFFFFF" style={styles.contactButtonIcon} />
+                                    <Text style={styles.contactButtonText}>Contact</Text>
+                                </View>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -628,15 +634,27 @@ const styles = StyleSheet.create({
         color: '#7F8C8D',
     },
     contactButton: {
-        backgroundColor: '#F0F0F0',
-        paddingVertical: 8,
-        paddingHorizontal: 15,
-        borderRadius: 5,
+        backgroundColor: '#45B69C',
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        borderRadius: 8,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 1.5,
+    },
+    contactButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    contactButtonIcon: {
+        marginRight: 5,
     },
     contactButtonText: {
         fontSize: 14,
-        color: '#2C3E50',
-        fontWeight: '500',
+        color: '#FFFFFF',
+        fontWeight: '600',
     },
     shippingOptions: {
         marginBottom: 10,

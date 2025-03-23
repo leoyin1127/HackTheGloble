@@ -111,18 +111,15 @@ class ProductService {
             // Filter out categories unlikely to be sold in second-hand marketplaces
             // Default to true if not specified
             if (filters.excludeUnlikelySH !== false) {
-                // Exclude personal care items
+                // Exclude personal care category entirely
                 query = query.not('master_category', 'eq', 'personal care');
 
-                // Also filter out products with "lipstick" in the title or description
-                // This uses Supabase's filter() method which is more reliable for complex conditions
-                query = query.filter('title', 'not.ilike', '%lipstick%');
-                query = query.filter('description', 'not.ilike', '%lipstick%');
-                query = query.filter('article_type', 'not.ilike', '%lipstick%');
+                // Focus on excluding just a few very specific personal items that are inappropriate for resale
+                // Rather than broad filtering, target specific items people wouldn't want second-hand
+                const inappropriateItems = ['lipstick', 'mascara', 'eyeliner'];
 
-                // Additional filters for other personal care items
-                const unlikelyItems = ['makeup', 'cosmetic', 'mascara', 'foundation', 'eyeliner'];
-                unlikelyItems.forEach(item => {
+                // Only filter title for the most inappropriate items
+                inappropriateItems.forEach(item => {
                     query = query.filter('title', 'not.ilike', `%${item}%`);
                 });
             }
@@ -256,8 +253,6 @@ class ProductService {
                 .eq('master_category', category)
                 .not('master_category', 'eq', 'personal care')
                 .filter('title', 'not.ilike', '%lipstick%')
-                .filter('description', 'not.ilike', '%lipstick%')
-                .filter('article_type', 'not.ilike', '%lipstick%')
                 .limit(limit);
 
             if (error) {
@@ -285,8 +280,6 @@ class ProductService {
                 .neq('id', productId)
                 .not('master_category', 'eq', 'personal care')
                 .filter('title', 'not.ilike', '%lipstick%')
-                .filter('description', 'not.ilike', '%lipstick%')
-                .filter('article_type', 'not.ilike', '%lipstick%')
                 .limit(limit);
 
             if (error) {
@@ -312,8 +305,6 @@ class ProductService {
                 `)
                 .not('master_category', 'eq', 'personal care')
                 .filter('title', 'not.ilike', '%lipstick%')
-                .filter('description', 'not.ilike', '%lipstick%')
-                .filter('article_type', 'not.ilike', '%lipstick%')
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
