@@ -1,250 +1,139 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Users table
-CREATE TABLE IF NOT EXISTS users (
+-- Create users table
+CREATE TABLE IF NOT EXISTS public.users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username VARCHAR(50) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    location VARCHAR(255),
-    shipping_address TEXT,
-    preferences JSONB DEFAULT '[]'::JSONB,
-    role VARCHAR(20) DEFAULT 'user',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'user',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Categories table
-CREATE TABLE IF NOT EXISTS categories (
+-- Create categories table
+CREATE TABLE IF NOT EXISTS public.categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(50) UNIQUE NOT NULL,
     description TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Products table
-CREATE TABLE IF NOT EXISTS products (
+-- Create products table with fashion dataset attributes
+CREATE TABLE IF NOT EXISTS public.products (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title VARCHAR(255) NOT NULL,
+    description TEXT,
     price DECIMAL(10, 2) NOT NULL,
-    description TEXT NOT NULL,
-    images TEXT[] DEFAULT ARRAY[]::TEXT[],
-    condition VARCHAR(50) NOT NULL,
+    condition VARCHAR(50),
     brand VARCHAR(100),
     size VARCHAR(50),
     material VARCHAR(100),
     color VARCHAR(50),
-    seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    category_ids UUID[] DEFAULT ARRAY[]::UUID[],
-    sustainability_info JSONB DEFAULT '{}'::JSONB,
-    sustainability INTEGER DEFAULT 0,
-    sustainability_badges TEXT[] DEFAULT ARRAY[]::TEXT[],
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    images TEXT[],
+    supabase_image_url TEXT,
+    seller_id UUID REFERENCES public.users(id),
+    sustainability INTEGER,
+    sustainability_badges TEXT[],
+    sustainability_info JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- Fashion dataset specific attributes
+    gender VARCHAR(50),
+    master_category VARCHAR(100),
+    sub_category VARCHAR(100),
+    article_type VARCHAR(100),
+    base_colour VARCHAR(50),
+    season VARCHAR(50),
+    year VARCHAR(10),
+    usage VARCHAR(100),
+    product_display_name VARCHAR(255)
 );
 
--- Cart items table
-CREATE TABLE IF NOT EXISTS cart_items (
+-- Create product_categories junction table
+CREATE TABLE IF NOT EXISTS public.product_categories (
+    product_id UUID REFERENCES public.products(id) ON DELETE CASCADE,
+    category_id UUID REFERENCES public.categories(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (product_id, category_id)
+);
+
+-- Create product_images table
+CREATE TABLE IF NOT EXISTS public.product_images (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES public.products(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    position INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create carts table
+CREATE TABLE IF NOT EXISTS public.carts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create cart_items table
+CREATE TABLE IF NOT EXISTS public.cart_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cart_id UUID REFERENCES public.carts(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES public.products(id) ON DELETE CASCADE,
     quantity INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(user_id, product_id)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Orders table
-CREATE TABLE IF NOT EXISTS orders (
+-- Create orders table
+CREATE TABLE IF NOT EXISTS public.orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+    user_id UUID REFERENCES public.users(id),
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
     total_amount DECIMAL(10, 2) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending',
-    shipping_address TEXT NOT NULL,
-    shipping_method VARCHAR(100) NOT NULL,
-    payment_method VARCHAR(100) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    shipping_address JSONB,
+    shipping_method VARCHAR(100),
+    payment_method VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Order items table
-CREATE TABLE IF NOT EXISTS order_items (
+-- Create order_items table
+CREATE TABLE IF NOT EXISTS public.order_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-    product_id UUID NOT NULL REFERENCES products(id) ON DELETE SET NULL,
+    order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES public.products(id),
     quantity INTEGER NOT NULL DEFAULT 1,
     price DECIMAL(10, 2) NOT NULL,
-    subtotal DECIMAL(10, 2) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Messages table
-CREATE TABLE IF NOT EXISTS messages (
+-- Create messages table for chat
+CREATE TABLE IF NOT EXISTS public.messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    recipient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    item_id UUID REFERENCES products(id) ON DELETE SET NULL,
-    text TEXT NOT NULL,
-    images TEXT[] DEFAULT ARRAY[]::TEXT[],
-    status VARCHAR(20) NOT NULL DEFAULT 'unread',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    sender_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    recipient_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Saved items table
-CREATE TABLE IF NOT EXISTS saved_items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(user_id, product_id)
-);
-
--- Product reviews table
-CREATE TABLE IF NOT EXISTS product_reviews (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
-    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
-    comment TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(product_id, user_id)
-);
-
--- Seller reviews table
-CREATE TABLE IF NOT EXISTS seller_reviews (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reviewer_id UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
-    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
-    comment TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(seller_id, reviewer_id)
-);
-
--- Function to create an order with items
-CREATE OR REPLACE FUNCTION create_order(
-    p_user_id UUID,
-    p_total_amount DECIMAL,
-    p_shipping_address TEXT,
-    p_shipping_method VARCHAR,
-    p_payment_method VARCHAR,
-    p_items JSONB
-) RETURNS UUID AS $$
-DECLARE
-    v_order_id UUID;
-    v_item JSONB;
-BEGIN
-    -- Insert order
-    INSERT INTO orders (
-        user_id,
-        total_amount,
-        shipping_address,
-        shipping_method,
-        payment_method
-    ) VALUES (
-        p_user_id,
-        p_total_amount,
-        p_shipping_address,
-        p_shipping_method,
-        p_payment_method
-    ) RETURNING id INTO v_order_id;
-    
-    -- Insert order items
-    FOR v_item IN SELECT * FROM jsonb_array_elements(p_items) LOOP
-        INSERT INTO order_items (
-            order_id,
-            product_id,
-            quantity,
-            price,
-            subtotal
-        ) VALUES (
-            v_order_id,
-            (v_item->>'product_id')::UUID,
-            (v_item->>'quantity')::INTEGER,
-            (v_item->>'price')::DECIMAL,
-            (v_item->>'subtotal')::DECIMAL
-        );
-    END LOOP;
-    
-    RETURN v_order_id;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to get chat list with latest message per chat and unread count
-CREATE OR REPLACE FUNCTION get_chat_list(p_user_id UUID)
-RETURNS TABLE (
-    user_id UUID,
-    message_id UUID,
-    sender_id UUID,
-    recipient_id UUID,
-    item_id UUID,
-    text TEXT,
-    images TEXT[],
-    status VARCHAR,
-    created_at TIMESTAMP WITH TIME ZONE,
-    unread_count BIGINT
-) AS $$
-BEGIN
-    RETURN QUERY
-    WITH chat_partners AS (
-        -- Find all users the current user has chatted with
-        SELECT DISTINCT
-            CASE
-                WHEN sender_id = p_user_id THEN recipient_id
-                ELSE sender_id
-            END AS partner_id
-        FROM messages
-        WHERE sender_id = p_user_id OR recipient_id = p_user_id
-    ),
-    latest_messages AS (
-        -- Get the latest message for each chat partner
-        SELECT DISTINCT ON (partner_id)
-            cp.partner_id,
-            m.id,
-            m.sender_id,
-            m.recipient_id,
-            m.item_id,
-            m.text,
-            m.images,
-            m.status,
-            m.created_at
-        FROM chat_partners cp
-        JOIN messages m ON (m.sender_id = cp.partner_id AND m.recipient_id = p_user_id)
-            OR (m.sender_id = p_user_id AND m.recipient_id = cp.partner_id)
-        ORDER BY cp.partner_id, m.created_at DESC
-    ),
-    unread_counts AS (
-        -- Count unread messages for each chat partner
-        SELECT
-            sender_id,
-            COUNT(*) AS count
-        FROM messages
-        WHERE recipient_id = p_user_id AND status = 'unread'
-        GROUP BY sender_id
-    )
-    SELECT
-        lm.partner_id,
-        lm.id,
-        lm.sender_id,
-        lm.recipient_id,
-        lm.item_id,
-        lm.text,
-        lm.images,
-        lm.status,
-        lm.created_at,
-        COALESCE(uc.count, 0) AS unread_count
-    FROM latest_messages lm
-    LEFT JOIN unread_counts uc ON lm.partner_id = uc.sender_id
-    ORDER BY lm.created_at DESC;
-END;
-$$ LANGUAGE plpgsql;
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_products_seller_id ON public.products(seller_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_cart_id ON public.cart_items(cart_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_product_id ON public.cart_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON public.order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON public.order_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient ON public.messages(sender_id, recipient_id);
 
 -- Insert some initial categories
-INSERT INTO categories (name, description) VALUES
+INSERT INTO public.categories (name, description) VALUES
 ('Clothing', 'Sustainable and second-hand clothing items'),
 ('Home', 'Eco-friendly home goods and decor'),
 ('Electronics', 'Refurbished and energy-efficient electronics'),

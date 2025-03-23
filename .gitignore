@@ -63,3 +63,6 @@ server/uploads/*
 .temp/
 tmp/
 temp/ 
+
+# Data
+data/

@@ -11,6 +11,7 @@ import {
     Alert,
     ImageBackground,
     TextInput,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,14 +22,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../../context/ThemeContext';
 import { MainStackParamList } from '../../navigation/AppNavigator';
+import ProductService, { Product } from '../../services/ProductService';
 
 type HomeScreenNavigationProp = StackNavigationProp<MainStackParamList>;
 
 const { width, height } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 120;
 
-// Sample data for items
-const ITEMS = [
+// Sample data for fallback
+const FALLBACK_ITEMS = [
     {
         id: '1',
         title: 'Vintage Denim Jacket',
@@ -79,6 +81,9 @@ const ITEMS = [
     },
 ];
 
+// Add a baseUrl for the server API
+const API_BASE_URL = 'http://localhost:3000';
+
 const HomeScreen = () => {
     const navigation = useNavigation<HomeScreenNavigationProp>();
     const { colors, spacing, typography, borderRadius, shadows, animation } = useTheme();
@@ -87,7 +92,11 @@ const HomeScreen = () => {
     const [showGoodChoice, setShowGoodChoice] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [filteredItems, setFilteredItems] = useState(ITEMS);
+    const [isLoading, setIsLoading] = useState(true);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [filteredItems, setFilteredItems] = useState<Product[]>([]);
+    const [bucketIndex, setBucketIndex] = useState(0);
+    const possibleBuckets = ['products', 'images', 'uploads', 'files'];
 
     // Animation values
     const position = useRef(new Animated.ValueXY()).current;
@@ -114,6 +123,78 @@ const HomeScreen = () => {
     // Adding a scale animation for item entrance
     const entryAnim = useRef(new Animated.Value(0.9)).current;
 
+    // Navigation handler for ImageTest screen
+    const navigateToImageTest = () => {
+        navigation.navigate('ImageTest');
+    };
+
+    // Fetch products from the database
+    useEffect(() => {
+        const loadProducts = async () => {
+            try {
+                setIsLoading(true);
+                const fetchedProducts = await ProductService.getProducts({ sortBy: 'sustainability', limit: 10 });
+
+                if (!fetchedProducts || fetchedProducts.length === 0) {
+                    console.log('No products returned from API, using fallback data');
+                    // Use fallback if no products
+                    setFilteredItems(getFallbackProducts());
+                } else {
+                    console.log(`Loaded ${fetchedProducts.length} products from API`);
+                    setProducts(fetchedProducts);
+                    setFilteredItems(fetchedProducts);
+                }
+            } catch (error) {
+                console.error('Error fetching products:', error);
+                // Use fallback data if fetch fails
+                setFilteredItems(getFallbackProducts());
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadProducts();
+    }, []);
+
+    // Helper function to get fallback products
+    const getFallbackProducts = (): Product[] => {
+        return FALLBACK_ITEMS.map(item => {
+            const processedItem: Product = {
+                id: item.id,
+                title: item.title,
+                price: parseFloat(item.price.replace('$', '')),
+                description: item.description,
+                images: [item.image.uri],
+                condition: 'good',
+                seller_id: 'unknown-seller', // Provide a default string value
+                sellerName: item.sellerName,
+                sustainability: item.sustainability,
+                sustainability_badges: item.sustainabilityBadges,
+                sustainability_info: {},
+                created_at: new Date(),
+                updated_at: new Date(),
+            };
+            return processedItem;
+        });
+    };
+
+    // Update filtered items when search query changes
+    useEffect(() => {
+        if (searchQuery.trim() === '') {
+            setFilteredItems(products);
+            setCurrentIndex(0);
+        } else {
+            const query = searchQuery.toLowerCase();
+            const filtered = products.filter(product =>
+                product.title.toLowerCase().includes(query) ||
+                product.description.toLowerCase().includes(query) ||
+                (product.brand && product.brand.toLowerCase().includes(query))
+            );
+            setFilteredItems(filtered);
+            setCurrentIndex(0);
+        }
+    }, [searchQuery, products]);
+
     useEffect(() => {
         // Animate card entry
         Animated.spring(entryAnim, {
@@ -123,21 +204,6 @@ const HomeScreen = () => {
             useNativeDriver: true,
         }).start();
     }, [currentIndex]);
-
-    useEffect(() => {
-        if (searchQuery.trim() === '') {
-            setFilteredItems(ITEMS);
-            setCurrentIndex(0);
-        } else {
-            const filtered = ITEMS.filter(item =>
-                item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.sellerName.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-            setFilteredItems(filtered);
-            setCurrentIndex(0);
-        }
-    }, [searchQuery]);
 
     // Pan responder for swipe gestures
     const panResponder = useRef(
@@ -167,8 +233,11 @@ const HomeScreen = () => {
     };
 
     const swipeRight = () => {
-        // Save item and continue
-        setSavedItems(prev => [...prev, ITEMS[currentIndex].id]);
+        // Ensure filteredItems[currentIndex] exists before accessing id
+        if (filteredItems.length > currentIndex && filteredItems[currentIndex]) {
+            // Save item and continue
+            setSavedItems(prev => [...prev, filteredItems[currentIndex].id]);
+        }
 
         Animated.timing(position, {
             toValue: { x: -width - 100, y: 0 },
@@ -218,9 +287,9 @@ const HomeScreen = () => {
     };
 
     const handleChatPress = () => {
-        const item = ITEMS[currentIndex];
+        const item = filteredItems[currentIndex];
         if (item) {
-            navigation.navigate('Chat', { sellerId: item.sellerName });
+            navigation.navigate('Chat', { sellerId: item.sellerName || 'unknown' });
         }
     };
 
@@ -235,9 +304,63 @@ const HomeScreen = () => {
         });
     };
 
+    // Simplify the fixSupabaseImageUrl function to just use placeholder images
+    const fixSupabaseImageUrl = (url?: string): string => {
+        if (!url) {
+            return 'https://placehold.co/600x800/E0F7FA/2C3E50?text=No+Image';
+        }
+
+        // Return URL as is if it's already fully formed
+        if (url.startsWith('http')) {
+            return url;
+        }
+
+        // Handle relative URLs
+        if (url.startsWith('/')) {
+            return `${API_BASE_URL}${url}`;
+        }
+
+        // If we get here, it's not a valid URL, so use a placeholder
+        return 'https://placehold.co/600x800/E0F7FA/2C3E50?text=Invalid+URL';
+    };
+
+    // Update the handleImageError function to use placeholder images directly rather than trying different buckets
+    const handleImageError = () => {
+        console.log('Image failed to load, using placeholder image');
+        // Force re-render with placeholder image
+        setFilteredItems(prevItems => {
+            // Create a new copy of the items array with updated image
+            return prevItems.map((p, idx) => {
+                if (idx === currentIndex) {
+                    return {
+                        ...p,
+                        // Replace the images array with a working placeholder
+                        images: ['https://placehold.co/600x800/E0F7FA/2C3E50?text=Product']
+                    };
+                }
+                return p;
+            });
+        });
+    };
+
     const renderCard = () => {
-        if (currentIndex >= filteredItems.length) {
-            // No more items to show
+        if (isLoading) {
+            return (
+                <View style={styles.cardContainer}>
+                    <View style={[styles.card, { backgroundColor: colors.neutral.white }]}>
+                        <View style={styles.emptyStateContainer}>
+                            <ActivityIndicator size="large" color={colors.primary.main} />
+                            <Text style={[styles.emptyStateTitle, { color: colors.neutral.darkGray, marginTop: spacing.md }]}>
+                                Loading products...
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+            );
+        }
+
+        if (currentIndex >= filteredItems.length || !filteredItems[currentIndex]) {
+            // No more items to show or current item is undefined
             return (
                 <View style={styles.cardContainer}>
                     <View style={[styles.card, { backgroundColor: colors.neutral.white }]}>
@@ -257,14 +380,61 @@ const HomeScreen = () => {
             );
         }
 
+        const item = filteredItems[currentIndex];
+
+        // Ensure item exists
+        if (!item) {
+            console.error('Item is undefined at index', currentIndex);
+            return (
+                <View style={styles.cardContainer}>
+                    <View style={[styles.card, { backgroundColor: colors.neutral.white }]}>
+                        <View style={styles.emptyStateContainer}>
+                            <Ionicons name="alert-circle-outline" size={80} color={colors.semantic.error} />
+                            <Text style={styles.emptyStateTitle}>Item Error</Text>
+                            <Text style={styles.emptyStateSubtitle}>There was a problem loading this item</Text>
+                            <TouchableOpacity
+                                style={[styles.resetButton, { backgroundColor: colors.primary.main, marginTop: 24 }]}
+                                onPress={() => setCurrentIndex(currentIndex + 1)}
+                            >
+                                <Text style={{ color: 'white', fontWeight: 'bold' }}>Skip This Item</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            );
+        }
+
+        // Log image data to debug
+        console.log('Item images data:', JSON.stringify(item.images));
+
+        // Get image URL with better fallback handling
+        let imageUrl = 'https://placehold.co/600x800/E0F7FA/2C3E50?text=No+Image';
+
+        if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+            // If the image is already a full URL, use it directly
+            if (typeof item.images[0] === 'string') {
+                imageUrl = fixSupabaseImageUrl(item.images[0]);
+            }
+            // If we have an object with url property (from Supabase join query)
+            else if (typeof item.images[0] === 'object' && item.images[0] !== null) {
+                const imageObject = item.images[0] as any;
+                if (imageObject && imageObject.url) {
+                    imageUrl = fixSupabaseImageUrl(imageObject.url);
+                }
+            }
+            console.log('Using image URL:', imageUrl);
+        } else {
+            console.log('No valid images found, using placeholder');
+        }
+
         // Variables for current and next card
-        const currentItem = filteredItems[currentIndex];
         const nextItem = currentIndex < filteredItems.length - 1 ? filteredItems[currentIndex + 1] : null;
 
         // Transform for the card sliding and rotation
         const cardAnimatedStyle = {
             transform: [
                 { translateX: position.x },
+                { translateY: position.y },
                 { rotate: rotation },
                 { scale: entryAnim }
             ]
@@ -289,16 +459,20 @@ const HomeScreen = () => {
 
         return (
             <Animated.View
+                {...panResponder.panHandlers}
                 style={[
                     styles.card,
                     {
+                        transform: [
+                            { translateX: position.x },
+                            { translateY: position.y },
+                            { rotate: rotation },
+                            { scale: entryAnim },
+                        ],
                         backgroundColor: colors.neutral.white,
-                        borderRadius: borderRadius.xl,
-                        ...shadows.xl,
+                        borderRadius: borderRadius.lg,
                     },
-                    cardAnimatedStyle,
                 ]}
-                {...(showDetails ? {} : panResponder.panHandlers)}
             >
                 {/* Header with Logo and Icons */}
                 <View style={styles.cardHeader}>
@@ -320,7 +494,11 @@ const HomeScreen = () => {
                 <View style={styles.cardContent}>
                     {/* Item Image */}
                     <View style={[styles.imageContainer, { borderRadius: borderRadius.xl, overflow: 'hidden' }]}>
-                        <ImageBackground source={currentItem.image} style={styles.itemImage}>
+                        <ImageBackground
+                            source={{ uri: imageUrl }}
+                            style={styles.itemImage}
+                            onError={handleImageError}
+                        >
                             {/* Seller info (positioned at top of image) */}
                             <BlurView
                                 intensity={80}
@@ -330,15 +508,18 @@ const HomeScreen = () => {
                                 ]}
                             >
                                 <View style={styles.sellerInfo}>
-                                    <Image source={currentItem.sellerAvatar} style={styles.sellerAvatar} />
+                                    <Image
+                                        source={{ uri: 'https://i.pinimg.com/1200x/77/00/70/7700709ac1285b907c498a70fbccea5e.jpg' }}
+                                        style={styles.sellerAvatar}
+                                    />
                                     <Text style={[styles.sellerName, { color: colors.neutral.charcoal }]}>
-                                        {currentItem.sellerName}
+                                        {item.sellerName || 'Unknown'}
                                     </Text>
                                 </View>
                                 <View style={styles.ratingContainer}>
                                     <Ionicons name="star" size={18} color={colors.accent.beige} />
                                     <Text style={[styles.ratingText, { color: colors.neutral.charcoal }]}>
-                                        {currentItem.sellerRating}
+                                        4.5
                                     </Text>
                                 </View>
                             </BlurView>
@@ -354,15 +535,15 @@ const HomeScreen = () => {
                                 <View style={[
                                     styles.circleProgress,
                                     {
-                                        borderColor: getSustainabilityColor(currentItem.sustainability),
-                                        backgroundColor: `${getSustainabilityColor(currentItem.sustainability)}20`
+                                        borderColor: getSustainabilityColor(item.sustainability),
+                                        backgroundColor: `${getSustainabilityColor(item.sustainability)}20`
                                     }
                                 ]}>
                                     <Text style={[
                                         styles.sustainabilityScore,
-                                        { color: getSustainabilityColor(currentItem.sustainability) }
+                                        { color: getSustainabilityColor(item.sustainability) }
                                     ]}>
-                                        {currentItem.sustainability}
+                                        {item.sustainability}
                                     </Text>
                                 </View>
                             </BlurView>
@@ -376,10 +557,10 @@ const HomeScreen = () => {
                             {/* Item name and price - visible on the image */}
                             <Animated.View style={[styles.itemMainInfo, mainInfoStyle]}>
                                 <Text style={[styles.itemTitle, { color: colors.neutral.white, fontSize: typography.fontSize.xxl }]}>
-                                    {currentItem.title}
+                                    {item.title}
                                 </Text>
                                 <Text style={[styles.itemPrice, { color: colors.neutral.white, fontSize: typography.fontSize.lg }]}>
-                                    {currentItem.price}
+                                    ${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}
                                 </Text>
                             </Animated.View>
 
@@ -394,19 +575,19 @@ const HomeScreen = () => {
                                 <BlurView intensity={85} style={styles.detailsBlur}>
                                     <View style={[styles.detailsHeader, { borderBottomColor: colors.neutral.lightGray }]}>
                                         <Text style={[styles.detailsTitle, { color: colors.neutral.charcoal, fontSize: typography.fontSize.lg }]}>
-                                            {currentItem.title}
+                                            {item.title}
                                         </Text>
                                         <Text style={[styles.detailsPrice, { color: colors.primary.main, fontSize: typography.fontSize.lg }]}>
-                                            {currentItem.price}
+                                            ${typeof item.price === 'number' ? item.price.toFixed(2) : item.price}
                                         </Text>
                                     </View>
 
                                     <Text style={[styles.description, { color: colors.neutral.darkGray, fontSize: typography.fontSize.md }]}>
-                                        {currentItem.description}
+                                        {item.description}
                                     </Text>
 
                                     <View style={styles.sustainabilityBadges}>
-                                        {currentItem.sustainabilityBadges.map((badge, index) => (
+                                        {item.sustainability_badges && item.sustainability_badges.map((badge, index) => (
                                             <View
                                                 key={index}
                                                 style={[
@@ -452,7 +633,7 @@ const HomeScreen = () => {
                                 </BlurView>
                             </Animated.View>
 
-                            {/* Like and Nope overlays - swapped content */}
+                            {/* Like and Nope overlays */}
                             <Animated.View style={[styles.likeOverlay, { opacity: nopeOpacity }]}>
                                 <BlurView intensity={80} style={[styles.overlayBadge, { borderColor: colors.semantic.error }]}>
                                     <Text style={[styles.overlayText, { color: colors.semantic.error }]}>NOPE</Text>
@@ -585,6 +766,14 @@ const HomeScreen = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.neutral.offWhite }]}>
             <StatusBar style="dark" />
 
+            {/* Test Images Button */}
+            <TouchableOpacity
+                style={[styles.testImagesButton, { backgroundColor: colors.primary.main }]}
+                onPress={navigateToImageTest}
+            >
+                <Text style={styles.testImagesButtonText}>Test Images</Text>
+            </TouchableOpacity>
+
             {/* Search Bar */}
             <View style={[styles.searchContainer, { backgroundColor: colors.neutral.offWhite }]}>
                 <View style={[styles.searchInputContainer, {
@@ -643,8 +832,9 @@ const styles = StyleSheet.create({
     card: {
         width: width * 0.9,
         height: height * 0.75,
-        overflow: 'hidden',
         borderRadius: 30,
+        overflow: 'hidden',
+        backgroundColor: '#FFF',
     },
     cardHeader: {
         width: '100%',
@@ -700,19 +890,19 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         backgroundColor: 'rgba(255,255,255,0.4)',
     },
-    sellerInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
     sellerAvatar: {
         width: 32,
         height: 32,
         borderRadius: 16,
         marginRight: 8,
     },
+    sellerInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     sellerName: {
-        fontSize: 14,
-        fontWeight: '600',
+        fontWeight: 'bold',
+        marginLeft: 8,
     },
     ratingContainer: {
         flexDirection: 'row',
@@ -720,28 +910,7 @@ const styles = StyleSheet.create({
         marginLeft: 12,
     },
     ratingText: {
-        fontSize: 14,
         fontWeight: '700',
-        marginLeft: 4,
-    },
-    sustainabilityBadge: {
-        position: 'absolute',
-        top: 20,
-        right: 20,
-        padding: 3,
-        backgroundColor: 'rgba(255,255,255,0.4)',
-    },
-    circleProgress: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        borderWidth: 3,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    sustainabilityScore: {
-        fontSize: 16,
-        fontWeight: 'bold',
     },
     itemMainInfo: {
         position: 'absolute',
@@ -1024,6 +1193,51 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    sustainabilityBadge: {
+        position: 'absolute',
+        top: 20,
+        right: 20,
+        padding: 3,
+        backgroundColor: 'rgba(255,255,255,0.4)',
+    },
+    circleProgress: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 3,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    sustainabilityScore: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    testButton: {
+        position: 'absolute',
+        bottom: 20,
+        right: 20,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        zIndex: 10,
+    },
+    testButtonText: {
+        fontWeight: 'bold',
+    },
+    testImagesButton: {
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        zIndex: 1000,
+    },
+    testImagesButtonText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 14,
     },
 });
 

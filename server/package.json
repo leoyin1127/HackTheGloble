@@ -9,10 +9,13 @@
     "build": "tsc",
     "lint": "eslint . --ext .ts",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "setup-db": "ts-node src/scripts/setup-database.ts",
     "import-data": "ts-node src/scripts/import-fashion-data.ts",
     "import-api": "ts-node src/scripts/import-api.ts",
     "import-sql": "ts-node src/scripts/import-sql-dump.ts",
-    "import-s3": "ts-node src/scripts/import-s3.ts"
+    "import-s3": "ts-node src/scripts/import-s3.ts",
+    "upload-images": "NODE_OPTIONS=\"--max-old-space-size=8192\" ts-node src/scripts/upload-images-to-supabase.ts",
+    "direct-import": "ts-node src/scripts/direct-image-import.ts"
   },
   "keywords": [],
   "author": "",

@@ -1,9 +1,19 @@
+// TypeScript declaration for global.gc
+declare global {
+    namespace NodeJS {
+        interface Global {
+            gc: () => void;
+        }
+    }
+}
+
 import fs from 'fs';
 import path from 'path';
 import { createReadStream } from 'fs';
 import csv from 'csv-parser';
 import { supabase } from '../config/supabase';
 import dotenv from 'dotenv';
+import { v4 as uuidv4 } from 'uuid';
 
 // Load environment variables
 dotenv.config();
@@ -19,7 +29,7 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 }
 
 // Define the batch size and limit - we can process the entire small dataset
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 20; // Reduced batch size to avoid memory issues
 const IMPORT_LIMIT = 5000; // Increased for small dataset which has fewer items
 
 interface FashionItem {
@@ -67,7 +77,7 @@ const generateSustainabilityData = () => {
 };
 
 // Map Kaggle dataset categories to our application categories
-const mapCategories = async () => {
+const mapCategories = async (): Promise<Record<string, string>> => {
     try {
         // First, ensure we have the necessary categories in our database
         const categories = [
@@ -159,6 +169,23 @@ const getAdminUser = async (): Promise<string> => {
     }
 };
 
+// Image record interface
+interface ProductImage {
+    product_id: string;
+    url: string;
+    position: number;
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Product-category relation interface
+interface ProductCategory {
+    product_id: string;
+    category_id: string;
+    created_at?: Date;
+    updated_at?: Date;
+}
+
 // Main import function
 const importData = async () => {
     try {
@@ -182,14 +209,111 @@ const importData = async () => {
         let count = 0;
         let batch: any[] = [];
         let batchCount = 0;
+        let productCategoryRelations: ProductCategory[] = [];
+        let processedRows = 0;
+
+        // Create a Map to store ID mappings (Kaggle ID -> UUID)
+        // Using a Map for better memory efficiency with large datasets
+        const productIdMap = new Map<number, string>();
 
         console.log(`Processing CSV file: ${DATASET_PATH}`);
         console.log(`Will import up to ${IMPORT_LIMIT} items from the smaller dataset`);
 
-        // Process the CSV file
-        createReadStream(DATASET_PATH)
-            .pipe(csv())
-            .on('data', async (row: FashionItem) => {
+        // Process a batch of products and their images
+        const processProductBatch = async (currentBatch: any[]): Promise<void> => {
+            if (currentBatch.length === 0) return;
+
+            batchCount++;
+            console.log(`Inserting batch ${batchCount} (${currentBatch.length} items)`);
+
+            try {
+                const { error } = await supabase
+                    .from('products')
+                    .upsert(currentBatch, { onConflict: 'id' });
+
+                if (error) {
+                    console.error(`Error inserting batch ${batchCount}:`, error);
+                    return;
+                }
+
+                console.log(`Successfully inserted batch ${batchCount}`);
+
+                // Process image records for this batch
+                const imageRecords: ProductImage[] = [];
+
+                for (const product of currentBatch) {
+                    if (product.images && product.images.length > 0) {
+                        product.images.forEach((imageUrl: string, index: number) => {
+                            imageRecords.push({
+                                product_id: product.id,
+                                url: imageUrl,
+                                position: index,
+                                created_at: new Date(),
+                                updated_at: new Date()
+                            });
+                        });
+                    }
+                }
+
+                if (imageRecords.length > 0) {
+                    try {
+                        const { error: imageError } = await supabase
+                            .from('product_images')
+                            .insert(imageRecords);
+
+                        if (imageError) {
+                            console.error(`Error inserting product images:`, imageError);
+                        } else {
+                            console.log(`Inserted ${imageRecords.length} product images`);
+                        }
+                    } catch (error) {
+                        console.error('Error processing image records:', error);
+                    }
+                }
+            } catch (error) {
+                console.error(`Error processing batch ${batchCount}:`, error);
+            }
+        };
+
+        // Process category relationships
+        const processCategoryRelations = async (relations: ProductCategory[]): Promise<void> => {
+            if (relations.length === 0) return;
+
+            console.log(`Inserting ${relations.length} product-category relationships`);
+
+            // Insert in smaller batches
+            for (let i = 0; i < relations.length; i += 50) {
+                const relationBatch = relations.slice(i, i + 50);
+
+                try {
+                    const { error } = await supabase
+                        .from('product_categories')
+                        .insert(relationBatch);
+
+                    if (error) {
+                        console.error(`Error inserting product-category relationships:`, error);
+                    }
+                } catch (error) {
+                    console.error('Error processing category relationships batch:', error);
+                }
+
+                if (i % 200 === 0 && i > 0) {
+                    console.log(`Processed ${i} category relationships`);
+                }
+            }
+
+            console.log(`Successfully inserted product-category relationships`);
+        };
+
+        // Create a readable stream for the CSV file
+        const fileStream = createReadStream(DATASET_PATH);
+
+        // Create a parser
+        const parser = fileStream.pipe(csv());
+
+        // Use a Promise to handle the stream processing
+        await new Promise<void>((resolve, reject) => {
+            parser.on('data', (row: FashionItem) => {
                 // Stop if we've reached the limit
                 if (count >= IMPORT_LIMIT) return;
 
@@ -225,8 +349,15 @@ const importData = async () => {
                     // Generate sustainability data
                     const { score, badges } = generateSustainabilityData();
 
+                    // Create a unique product ID for linking to categories later
+                    const productId = uuidv4();
+
+                    // Store the mapping between Kaggle ID and UUID
+                    productIdMap.set(row.id, productId);
+
                     // Create product object
                     const product = {
+                        id: productId, // Set a predictable ID to use for relationships
                         title: row.productDisplayName || `${row.articleType} - ${row.gender}`,
                         price: Math.floor(Math.random() * 100) + 10, // Random price between 10-110
                         description: `${row.productDisplayName || 'Sustainable item'} - ${row.articleType} for ${row.gender}. Color: ${row.baseColour}. From ${row.season} ${row.year} collection.`,
@@ -237,7 +368,6 @@ const importData = async () => {
                         material: row.articleType || null,
                         color: row.baseColour || null,
                         seller_id: adminId,
-                        category_ids: categoryIds,
                         sustainability_info: {
                             impact: `This item has a sustainability score of ${score}. Higher is better.`,
                             certifications: badges,
@@ -245,57 +375,95 @@ const importData = async () => {
                         },
                         sustainability: score,
                         sustainability_badges: badges,
-                        created_at: new Date(),
-                        updated_at: new Date(),
+                        gender: row.gender || null,
+                        master_category: row.masterCategory || null,
+                        sub_category: row.subCategory || null,
+                        article_type: row.articleType || null,
+                        base_colour: row.baseColour || null,
+                        season: row.season || null,
+                        year: row.year || null,
+                        usage: row.usage || null,
+                        product_display_name: row.productDisplayName || null
                     };
+
+                    // Add category relationships to be inserted later
+                    categoryIds.forEach(categoryId => {
+                        if (categoryId) {
+                            productCategoryRelations.push({
+                                product_id: productId,
+                                category_id: categoryId,
+                                created_at: new Date(),
+                                updated_at: new Date()
+                            });
+                        }
+                    });
 
                     batch.push(product);
                     count++;
+                    processedRows++;
 
-                    // If batch is full or we've reached the limit, insert it
-                    if (batch.length >= BATCH_SIZE || count >= IMPORT_LIMIT) {
-                        batchCount++;
-                        console.log(`Inserting batch ${batchCount} (${batch.length} items)`);
+                    // Process batches to keep memory usage low
+                    if (batch.length >= BATCH_SIZE) {
+                        // Pause the stream while we process the batch
+                        parser.pause();
 
-                        const { error } = await supabase
-                            .from('products')
-                            .insert(batch);
+                        // Process this batch and continue when done
+                        processProductBatch([...batch])
+                            .then(() => {
+                                // Clear the batch array
+                                batch.length = 0;
 
-                        if (error) {
-                            console.error(`Error inserting batch ${batchCount}:`, error);
-                        } else {
-                            console.log(`Successfully inserted batch ${batchCount}`);
-                        }
-
-                        batch = [];
+                                // Process category relations if we've accumulated a lot
+                                if (productCategoryRelations.length >= 500) {
+                                    return processCategoryRelations([...productCategoryRelations])
+                                        .then(() => {
+                                            productCategoryRelations.length = 0;
+                                            parser.resume();
+                                        });
+                                } else {
+                                    parser.resume();
+                                    return Promise.resolve();
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error processing batch:', error);
+                                parser.resume();
+                            });
                     }
 
-                    if (count % 100 === 0) {
-                        console.log(`Processed ${count} items`);
+                    if (processedRows % 100 === 0) {
+                        console.log(`Processed ${processedRows} rows`);
+                        // Force garbage collection on older Node versions via global
+                        if (global.gc) {
+                            global.gc();
+                        }
                     }
                 } catch (error) {
                     console.error('Error processing item:', error);
                 }
-            })
-            .on('end', async () => {
-                // Insert any remaining items
+            });
+
+            parser.on('end', async () => {
+                // Process any remaining items
                 if (batch.length > 0) {
-                    batchCount++;
-                    console.log(`Inserting final batch ${batchCount} (${batch.length} items)`);
-
-                    const { error } = await supabase
-                        .from('products')
-                        .insert(batch);
-
-                    if (error) {
-                        console.error(`Error inserting final batch:`, error);
-                    } else {
-                        console.log(`Successfully inserted final batch`);
-                    }
+                    await processProductBatch(batch);
+                    batch.length = 0;
                 }
 
-                console.log(`Import complete! Imported ${count} items in ${batchCount} batches.`);
+                // Process any remaining category relationships
+                if (productCategoryRelations.length > 0) {
+                    await processCategoryRelations(productCategoryRelations);
+                    productCategoryRelations.length = 0;
+                }
+
+                console.log(`Import complete! Processed ${processedRows} rows and imported ${count} items in ${batchCount} batches.`);
+                resolve();
             });
+
+            parser.on('error', (error) => {
+                reject(error);
+            });
+        });
     } catch (error) {
         console.error('Error during import:', error);
     }

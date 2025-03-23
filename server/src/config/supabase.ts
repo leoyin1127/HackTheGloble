@@ -31,6 +31,14 @@ console.log('Environment variables:', {
 interface MockClient {
     from: (table: string) => any;
     rpc: (fn: string, params?: any) => Promise<any>;
+    storage: {
+        listBuckets: () => Promise<any>;
+        createBucket: (name: string, options?: any) => Promise<any>;
+        from: (bucket: string) => {
+            upload: (path: string, file: any, options?: any) => Promise<any>;
+            getPublicUrl: (path: string) => { data: { publicUrl: string } };
+        };
+    };
 }
 
 // Create a mock Supabase client for development
@@ -80,7 +88,21 @@ const createMockClient = (): MockClient => {
                 eq: () => Promise.resolve({ error: null })
             })
         }),
-        rpc: (fn: string, params?: any) => Promise.resolve({ data: { id: 'mock-id' }, error: null })
+        rpc: (fn: string, params?: any) => Promise.resolve({ data: { id: 'mock-id' }, error: null }),
+        storage: {
+            listBuckets: () => Promise.resolve({ data: [], error: null }),
+            createBucket: (name: string, options?: any) => Promise.resolve({
+                data: { name }, error: null
+            }),
+            from: (bucket: string) => ({
+                upload: (path: string, file: any, options?: any) => Promise.resolve({
+                    data: { Key: path }, error: null
+                }),
+                getPublicUrl: (path: string) => ({
+                    data: { publicUrl: `https://mock-storage-url.com/${bucket}/${path}` }
+                })
+            })
+        }
     };
 };
 

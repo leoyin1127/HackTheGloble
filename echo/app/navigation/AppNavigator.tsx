@@ -27,6 +27,9 @@ import ChatScreen from '../screens/main/ChatScreen';
 import SavedItemsScreen from '../screens/main/SavedItemsScreen';
 import ChatListScreen from '../screens/main/ChatListScreen';
 
+// Test Components
+import ImageTest from '../components/ImageTest';
+
 // Define the types for our navigation parameters
 export type AuthStackParamList = {
     Splash: undefined;
@@ -61,6 +64,7 @@ export type MainStackParamList = {
     Chat: { sellerId: string; itemId?: string };
     Saved: undefined;
     ChatList: undefined;
+    ImageTest: undefined;
 };
 
 export type TabParamList = {
@@ -203,6 +207,7 @@ const HomeStackNavigator = () => {
         <MainStack.Navigator screenOptions={{ headerShown: false }}>
             <MainStack.Screen name="SwipeHome" component={HomeScreen} />
             <MainStack.Screen name="Saved" component={SavedItemsScreen} />
+            <MainStack.Screen name="ImageTest" component={ImageTest} />
         </MainStack.Navigator>
     );
 };
