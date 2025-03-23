@@ -37,7 +37,9 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
     const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const [filters, setFilters] = useState<ProductFilters>({});
+    const [filters, setFilters] = useState<ProductFilters>({
+        excludeUnlikelySH: true // Default to excluding products unlikely for second-hand marketplace
+    });
     const [savedItemIds, setSavedItemIds] = useState<string[]>([]);
 
     // Load saved items from AsyncStorage on mount
@@ -181,7 +183,9 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     // Clear all filters
     const clearFilters = () => {
-        setFilters({});
+        setFilters({
+            excludeUnlikelySH: true // Maintain this filter even when clearing others
+        });
     };
 
     // Load initial featured products
