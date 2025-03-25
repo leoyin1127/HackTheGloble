@@ -8,12 +8,14 @@ import {
     KeyboardAvoidingView,
     Platform,
     ScrollView,
-    Alert
+    Alert,
+    Image
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { AuthStackParamList } from '../../navigation/AppNavigator';
 
@@ -118,6 +120,30 @@ const SignUpScreen = () => {
                             <Text style={styles.buttonText}>{isLoading ? 'Creating Account...' : 'Sign Up'}</Text>
                         </TouchableOpacity>
 
+                        <View style={styles.divider}>
+                            <View style={styles.dividerLine} />
+                            <Text style={styles.dividerText}>OR</Text>
+                            <View style={styles.dividerLine} />
+                        </View>
+
+                        <TouchableOpacity style={[styles.socialButton, styles.googleButton]}>
+                            <View style={styles.socialButtonContent}>
+                                <Image
+                                    source={{ uri: 'https://cdn1.iconfinder.com/data/icons/google-s-logo/150/Google_Icons-09-512.png' }}
+                                    style={styles.socialIcon}
+                                    resizeMode="contain"
+                                />
+                                <Text style={styles.socialButtonText}>Sign up with Google</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={[styles.socialButton, styles.facebookButton]}>
+                            <View style={styles.socialButtonContent}>
+                                <Ionicons name="logo-facebook" size={24} color="#FFFFFF" style={styles.socialIcon} />
+                                <Text style={[styles.socialButtonText, styles.facebookButtonText]}>Sign up with Facebook</Text>
+                            </View>
+                        </TouchableOpacity>
+
                         <View style={styles.termsContainer}>
                             <Text style={styles.termsText}>
                                 By signing up, you agree to our{' '}
@@ -196,6 +222,58 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 16,
         fontWeight: 'bold',
+    },
+    divider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 20,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#E0E0E0',
+    },
+    dividerText: {
+        marginHorizontal: 10,
+        color: '#7F8C8D',
+        fontWeight: 'bold',
+    },
+    socialButton: {
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+        borderRadius: 30,
+        padding: 14,
+        marginBottom: 15,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    googleButton: {
+        backgroundColor: '#FFFFFF',
+    },
+    facebookButton: {
+        backgroundColor: '#1877F2',
+        borderColor: '#1877F2',
+    },
+    socialButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    socialIcon: {
+        width: 24,
+        height: 24,
+        marginRight: 12,
+    },
+    socialButtonText: {
+        color: '#2C3E50',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    facebookButtonText: {
+        color: '#FFFFFF',
     },
     termsContainer: {
         marginTop: 20,

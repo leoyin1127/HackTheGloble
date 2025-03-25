@@ -8,12 +8,14 @@ import {
     KeyboardAvoidingView,
     Platform,
     ScrollView,
-    Alert
+    Alert,
+    Image
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { AuthStackParamList } from '../../navigation/AppNavigator';
 
@@ -99,12 +101,22 @@ const SignInScreen = () => {
                             <View style={styles.dividerLine} />
                         </View>
 
-                        <TouchableOpacity style={styles.socialButton}>
-                            <Text style={styles.socialButtonText}>Continue with Google</Text>
+                        <TouchableOpacity style={[styles.socialButton, styles.googleButton]}>
+                            <View style={styles.socialButtonContent}>
+                                <Image
+                                    source={{ uri: 'https://cdn1.iconfinder.com/data/icons/google-s-logo/150/Google_Icons-09-512.png' }}
+                                    style={styles.socialIcon}
+                                    resizeMode="contain"
+                                />
+                                <Text style={styles.socialButtonText}>Continue with Google</Text>
+                            </View>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.socialButton}>
-                            <Text style={styles.socialButtonText}>Continue with Facebook</Text>
+                        <TouchableOpacity style={[styles.socialButton, styles.facebookButton]}>
+                            <View style={styles.socialButtonContent}>
+                                <Ionicons name="logo-facebook" size={24} color="#FFFFFF" style={styles.socialIcon} />
+                                <Text style={[styles.socialButtonText, styles.facebookButtonText]}>Continue with Facebook</Text>
+                            </View>
                         </TouchableOpacity>
                     </View>
 
@@ -203,14 +215,39 @@ const styles = StyleSheet.create({
     socialButton: {
         borderWidth: 1,
         borderColor: '#E0E0E0',
-        borderRadius: 8,
-        padding: 16,
-        alignItems: 'center',
+        borderRadius: 30,
+        padding: 14,
         marginBottom: 15,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    googleButton: {
+        backgroundColor: '#FFFFFF',
+    },
+    facebookButton: {
+        backgroundColor: '#1877F2',
+        borderColor: '#1877F2',
+    },
+    socialButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    socialIcon: {
+        width: 24,
+        height: 24,
+        marginRight: 12,
     },
     socialButtonText: {
         color: '#2C3E50',
         fontSize: 16,
+        fontWeight: '500',
+    },
+    facebookButtonText: {
+        color: '#FFFFFF',
     },
     footer: {
         flexDirection: 'row',

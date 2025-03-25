@@ -14,7 +14,6 @@ import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import SignInScreen from '../screens/auth/SignInScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 import OnboardingScreen from '../screens/auth/OnboardingScreen';
-import SplashScreen from '../screens/auth/SplashScreen';
 
 // Main App Screens
 import HomeScreen from '../screens/main/HomeScreen';
@@ -34,7 +33,6 @@ import ImageTest from '../components/ImageTest';
 
 // Define the types for our navigation parameters
 export type AuthStackParamList = {
-    Splash: undefined;
     Welcome: undefined;
     SignIn: undefined;
     SignUp: undefined;
@@ -211,7 +209,6 @@ const getIconName = (routeName: string, isFocused: boolean): any => {
 // Auth Navigator
 const AuthNavigator = () => (
     <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-        <AuthStack.Screen name="Splash" component={SplashScreen} />
         <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
         <AuthStack.Screen name="SignIn" component={SignInScreen} />
         <AuthStack.Screen name="SignUp" component={SignUpScreen} />

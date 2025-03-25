@@ -1,10 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
     View,
     Text,
     StyleSheet,
     Dimensions,
-    Animated,
     TouchableOpacity
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,34 +23,6 @@ const WelcomeScreen = () => {
     const navigation = useNavigation<WelcomeScreenNavigationProp>();
     const { colors, spacing, typography, borderRadius } = useTheme();
 
-    // Animation values
-    const fadeAnim = new Animated.Value(0);
-    const slideAnim = new Animated.Value(50);
-    const logoAnim = new Animated.Value(0.8);
-
-    useEffect(() => {
-        // Sequential animations for a smooth reveal
-        Animated.sequence([
-            Animated.timing(logoAnim, {
-                toValue: 1,
-                duration: 800,
-                useNativeDriver: true,
-            }),
-            Animated.parallel([
-                Animated.timing(fadeAnim, {
-                    toValue: 1,
-                    duration: 800,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(slideAnim, {
-                    toValue: 0,
-                    duration: 800,
-                    useNativeDriver: true,
-                }),
-            ]),
-        ]).start();
-    }, []);
-
     return (
         <View style={styles.container}>
             <StatusBar style="light" />
@@ -68,32 +39,15 @@ const WelcomeScreen = () => {
             <View style={styles.patternOverlay} />
 
             {/* Logo and Branding */}
-            <Animated.View
-                style={[
-                    styles.logoContainer,
-                    {
-                        transform: [
-                            { scale: logoAnim }
-                        ]
-                    }
-                ]}
-            >
+            <View style={styles.logoContainer}>
                 <ManualLogo size={300} />
                 <Text style={[styles.appName, { color: colors.neutral.white, fontSize: typography.fontSize.hero }]}>
                     Echo
                 </Text>
-            </Animated.View>
+            </View>
 
             {/* Content Area */}
-            <Animated.View
-                style={[
-                    styles.contentContainer,
-                    {
-                        opacity: fadeAnim,
-                        transform: [{ translateY: slideAnim }]
-                    }
-                ]}
-            >
+            <View style={styles.contentContainer}>
                 <Text style={[styles.tagline, { color: colors.neutral.white, fontSize: typography.fontSize.xl }]}>
                     Sustainable Shopping.
                 </Text>
@@ -139,7 +93,7 @@ const WelcomeScreen = () => {
                         </Text>
                     </TouchableOpacity>
                 </View>
-            </Animated.View>
+            </View>
         </View>
     );
 };
