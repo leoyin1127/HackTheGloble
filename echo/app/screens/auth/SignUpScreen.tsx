@@ -30,7 +30,6 @@ const SignUpScreen = () => {
     const [isLoading, setIsLoading] = useState(false);
 
     const handleSignUp = async () => {
-        // Validation
         if (!username || !email || !password || !confirmPassword) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
@@ -41,20 +40,12 @@ const SignUpScreen = () => {
             return;
         }
 
-        // Simple email validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            Alert.alert('Error', 'Please enter a valid email address');
-            return;
-        }
-
         setIsLoading(true);
         try {
             await signUp(email, password, username);
-            // After successful sign up, navigate to onboarding
-            navigation.navigate('Onboarding');
+            // The AppNavigator will handle navigation based on auth state
         } catch (error) {
-            Alert.alert('Sign Up Failed', 'Please check your information and try again');
+            Alert.alert('Sign Up Failed', 'Please try again with different credentials');
         } finally {
             setIsLoading(false);
         }

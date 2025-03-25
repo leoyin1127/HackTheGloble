@@ -36,7 +36,7 @@ const SignInScreen = () => {
         setIsLoading(true);
         try {
             await signIn(email, password);
-            // Navigation will be handled automatically through the AppNavigator
+            // The AppNavigator will handle navigation based on auth state
         } catch (error) {
             Alert.alert('Sign In Failed', 'Please check your credentials and try again');
         } finally {

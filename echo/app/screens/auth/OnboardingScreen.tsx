@@ -52,7 +52,8 @@ const OnboardingScreen = () => {
             await updateProfile({
                 location,
                 shippingAddress,
-                preferences: selectedCategories
+                preferences: selectedCategories,
+                hasCompletedOnboarding: true
             });
             // After successful profile update, the AppNavigator will redirect to the main app
         } catch (error) {

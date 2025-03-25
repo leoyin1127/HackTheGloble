@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { CartProvider } from '../context/CartContext';
 
 // Auth Screens
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
@@ -328,7 +329,26 @@ const AppNavigator = () => {
         return null;
     }
 
-    return user ? <MainNavigator /> : <AuthNavigator />;
+    // If user is not authenticated, show auth flow
+    if (!user) {
+        return <AuthNavigator />;
+    }
+
+    // If user is authenticated but hasn't completed onboarding, show onboarding
+    if (!user.hasCompletedOnboarding) {
+        return (
+            <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+                <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
+            </AuthStack.Navigator>
+        );
+    }
+
+    // If user is authenticated and has completed onboarding, show main app
+    return (
+        <CartProvider>
+            <MainNavigator />
+        </CartProvider>
+    );
 };
 
 const styles = StyleSheet.create({

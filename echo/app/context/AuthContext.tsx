@@ -8,6 +8,7 @@ interface User {
     location?: string;
     shippingAddress?: string;
     preferences?: string[];
+    hasCompletedOnboarding?: boolean;
 }
 
 interface AuthContextType {
@@ -61,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 username: 'demo_user',
                 email: email,
                 location: 'Toronto, Canada',
+                hasCompletedOnboarding: false,
             };
 
             await AsyncStorage.setItem('@user', JSON.stringify(mockUser));
@@ -81,6 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: '123456',
                 username: username,
                 email: email,
+                hasCompletedOnboarding: false,
             };
 
             await AsyncStorage.setItem('@user', JSON.stringify(mockUser));

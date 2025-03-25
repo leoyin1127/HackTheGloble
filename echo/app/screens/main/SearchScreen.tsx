@@ -77,6 +77,17 @@ const SearchScreen = () => {
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [loadedItemIds, setLoadedItemIds] = useState<Set<string>>(new Set());
 
+    // Add initial loading state
+    useEffect(() => {
+        // Set initial loading state when component mounts
+        setIsSearching(true);
+
+        // Fetch initial products
+        fetchFilteredProducts();
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // Fetch products based on search query and filters with debounce
     useEffect(() => {
         // Clear any existing timeout to implement debouncing
@@ -650,12 +661,12 @@ const SearchScreen = () => {
         </View>
     );
 
-    // Loading indicator when searching
+    // Enhanced loading screen with a message
     const renderLoading = () => (
-        <View style={[styles.loadingContainer, { marginTop: spacing.xxxl }]}>
+        <View style={[styles.loadingContainer, { backgroundColor: colors.neutral.white }]}>
             <ActivityIndicator size="large" color={colors.primary.main} />
-            <Text style={{ marginTop: spacing.md, color: colors.neutral.darkGray }}>
-                Searching...
+            <Text style={[styles.loadingText, { color: colors.neutral.charcoal, marginTop: spacing.md }]}>
+                Finding sustainable items...
             </Text>
         </View>
     );
@@ -965,6 +976,13 @@ const SearchScreen = () => {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.neutral.offWhite }]}>
             <StatusBar barStyle="dark-content" />
+
+            {/* If loading first-time data, show the full-screen loading indicator */}
+            {isSearching && !isLoadingMore && (
+                <View style={StyleSheet.absoluteFill}>
+                    {renderLoading()}
+                </View>
+            )}
 
             {/* Header */}
             <View style={[styles.header, { paddingTop: spacing.md, paddingHorizontal: spacing.lg }]}>
@@ -1533,6 +1551,12 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        padding: 20,
+    },
+    loadingText: {
+        fontSize: 16,
+        fontWeight: '500',
+        textAlign: 'center',
     },
     loadMoreContainer: {
         width: '100%',

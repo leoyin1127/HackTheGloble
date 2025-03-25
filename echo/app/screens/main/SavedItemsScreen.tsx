@@ -298,6 +298,35 @@ const SavedItemsScreen = () => {
                             </Text>
                         </View>
                     </View>
+
+                    {/* Delete Button */}
+                    <TouchableOpacity
+                        style={[
+                            styles.deleteButton,
+                            {
+                                backgroundColor: colors.neutral.offWhite,
+                                borderTopWidth: 1,
+                                borderTopColor: colors.neutral.lightGray,
+                                padding: spacing.sm,
+                            }
+                        ]}
+                        onPress={() => handleRemoveItem(item.id)}
+                    >
+                        <Ionicons name="trash-outline" size={18} color={colors.semantic.error} />
+                        <Text
+                            style={[
+                                styles.deleteButtonText,
+                                {
+                                    color: colors.semantic.error,
+                                    fontSize: typography.fontSize.sm,
+                                    fontWeight: 'bold',
+                                    marginLeft: spacing.xs,
+                                }
+                            ]}
+                        >
+                            Remove from Favorites
+                        </Text>
+                    </TouchableOpacity>
                 </TouchableOpacity>
             </Animated.View>
         );
@@ -698,6 +727,16 @@ const styles = StyleSheet.create({
     retryButton: {
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    deleteButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        width: '100%',
+    },
+    deleteButtonText: {
+        fontWeight: '600',
     },
 });
 

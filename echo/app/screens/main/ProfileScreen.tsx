@@ -33,10 +33,10 @@ const ProfileScreen = () => {
         } else if (item.label === 'Log Out') {
             try {
                 await signOut();
-                // Navigate to SignUp screen
+                // Navigate to Welcome screen instead of SignUp
                 navigation.reset({
                     index: 0,
-                    routes: [{ name: 'SignUp' as never }]
+                    routes: [{ name: 'Welcome' as never }]
                 });
             } catch (error) {
                 console.error('Error signing out:', error);

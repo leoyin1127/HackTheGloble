@@ -25,6 +25,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { MainStackParamList } from '../../navigation/AppNavigator';
 import ProductService, { Product, ProductFilters } from '../../services/ProductService';
 import { useProducts } from '../../context/ProductContext';
+import { useCart } from '../../context/CartContext';
 import Logo from '../../components/Logo';
 import Swiper from 'react-native-deck-swiper';
 
@@ -162,6 +163,7 @@ const isUndergarment = (product: Product): boolean => {
 const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
     const { colors, spacing, typography, borderRadius, shadows, animation } = useTheme();
     const { featuredProducts, getFeaturedProducts, loading: productsLoading, error, saveProduct } = useProducts();
+    const { addToCart } = useCart();
 
     const [currentIndex, setCurrentIndex] = useState<number>(0);
     const [showGoodChoice, setShowGoodChoice] = useState(false);
@@ -400,6 +402,9 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
             try {
                 // Save item to the ProductContext
                 saveProduct(itemToSave.id);
+
+                // Add item to the cart
+                addToCart(itemToSave);
 
                 // Save the item name for displaying in the notification
                 setSavedItemName(itemToSave.title);
@@ -1098,6 +1103,8 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
 
     // Modify the renderGoodChoiceScreen to include buttons for continuing
     const renderGoodChoiceScreen = () => {
+        const currentItem = currentItemRef.current;
+
         return (
             <View style={[styles.goodChoiceContainer, { backgroundColor: colors.neutral.white, ...shadows.xl }]}>
                 <LinearGradient
@@ -1121,7 +1128,7 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                 <View style={styles.savedNotification}>
                     <Ionicons name="checkmark-circle" size={24} color={colors.primary.main} style={{ marginRight: 8 }} />
                     <Text style={[styles.savedNotificationText, { color: colors.primary.main }]}>
-                        Item saved to your collection!
+                        Item added to your cart!
                     </Text>
                 </View>
 
@@ -1130,8 +1137,8 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                         style={[
                             styles.circleButton,
                             {
-                                borderColor: colors.semantic.error,
-                                backgroundColor: `${colors.semantic.error}10`
+                                borderColor: colors.primary.main,
+                                backgroundColor: `${colors.primary.main}10`
                             }
                         ]}
                         onPress={() => {
@@ -1141,7 +1148,7 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                             entryAnim.setValue(0.9);
                         }}
                     >
-                        <Ionicons name="close" size={30} color={colors.semantic.error} />
+                        <Ionicons name="arrow-back" size={30} color={colors.primary.main} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -1172,14 +1179,16 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                             }
                         ]}
                         onPress={() => {
-                            navigation.navigate('Saved');
+                            if (currentItem) {
+                                addToCart(currentItem);
+                            }
                             setShowGoodChoice(false);
                             setCurrentIndex(prevIndex => prevIndex + 1);
                             position.setValue({ x: 0, y: 0 });
                             entryAnim.setValue(0.9);
                         }}
                     >
-                        <Ionicons name="bookmark-outline" size={30} color={colors.primary.main} />
+                        <Ionicons name="cart-outline" size={30} color={colors.primary.main} />
                     </TouchableOpacity>
                 </View>
 
@@ -1217,6 +1226,28 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
         if (score >= 75) return colors.primary.light;
         if (score >= 60) return colors.accent.beige;
         return colors.semantic.error;
+    }
+
+    // Add a loading screen component
+    const renderLoadingScreen = () => {
+        return (
+            <View style={[styles.loadingContainer, { backgroundColor: colors.neutral.white }]}>
+                <ActivityIndicator size="large" color={colors.primary.main} />
+                <Text style={[styles.loadingText, { color: colors.neutral.charcoal, marginTop: spacing.md }]}>
+                    Discovering sustainable items for you...
+                </Text>
+            </View>
+        );
+    };
+
+    // If loading, show the loading screen
+    if (isLoading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style="dark" />
+                {renderLoadingScreen()}
+            </SafeAreaView>
+        );
     }
 
     return (
@@ -1275,7 +1306,7 @@ const HomeScreen = memo(({ navigation, route }: HomeScreenProps) => {
                             >
                                 <Ionicons name="heart" size={20} color={colors.primary.main} />
                                 <Text style={styles.floatingSavedText}>
-                                    Item saved to collection!
+                                    Item added to your cart!
                                 </Text>
                             </Animated.View>
                         )}
@@ -1940,6 +1971,18 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: '100%',
+        padding: 20,
+    },
+    loadingText: {
+        fontSize: 16,
+        fontWeight: '500',
+        textAlign: 'center',
     },
 });
 
