@@ -21,6 +21,19 @@ import { AuthStackParamList } from '../../navigation/AppNavigator';
 
 type SignUpScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignUp'>;
 
+// Google Logo component with proper multi-color G logo
+const GoogleLogo = () => (
+    <Image
+        source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png' }}
+        style={{
+            width: 24,
+            height: 24,
+            marginRight: 16,
+        }}
+        resizeMode="contain"
+    />
+);
+
 const SignUpScreen = () => {
     const navigation = useNavigation<SignUpScreenNavigationProp>();
     const { signUp } = useAuth();
@@ -128,11 +141,7 @@ const SignUpScreen = () => {
 
                         <TouchableOpacity style={[styles.socialButton, styles.googleButton]}>
                             <View style={styles.socialButtonContent}>
-                                <Image
-                                    source={{ uri: 'https://cdn1.iconfinder.com/data/icons/google-s-logo/150/Google_Icons-09-512.png' }}
-                                    style={styles.socialIcon}
-                                    resizeMode="contain"
-                                />
+                                <GoogleLogo />
                                 <Text style={styles.socialButtonText}>Sign up with Google</Text>
                             </View>
                         </TouchableOpacity>
@@ -252,6 +261,7 @@ const styles = StyleSheet.create({
     },
     googleButton: {
         backgroundColor: '#FFFFFF',
+        borderColor: '#d3d3d3',
     },
     facebookButton: {
         backgroundColor: '#1877F2',

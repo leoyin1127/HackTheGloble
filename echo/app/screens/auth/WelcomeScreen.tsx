@@ -40,7 +40,7 @@ const WelcomeScreen = () => {
 
             {/* Logo and Branding */}
             <View style={styles.logoContainer}>
-                <ManualLogo size={300} />
+                <ManualLogo size={300} transparent={true} />
                 <Text style={[styles.appName, { color: colors.neutral.white, fontSize: typography.fontSize.hero }]}>
                     Echo
                 </Text>

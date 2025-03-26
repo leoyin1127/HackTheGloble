@@ -90,10 +90,10 @@ const ProfileScreen = () => {
                     />
                     <View style={[styles.profileInfo, { marginLeft: spacing.lg }]}>
                         <Text style={[styles.profileName, { color: colors.neutral.charcoal, fontSize: typography.fontSize.xl }]}>
-                            Clara Wilson
+                            Test User
                         </Text>
                         <Text style={[styles.profileEmail, { color: colors.neutral.darkGray, fontSize: typography.fontSize.sm }]}>
-                            clara.wilson@example.com
+                            test@example.com
                         </Text>
                         <TouchableOpacity
                             style={[

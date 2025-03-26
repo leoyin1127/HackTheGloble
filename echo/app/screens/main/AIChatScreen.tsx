@@ -88,11 +88,45 @@ const AIChatScreen = () => {
 
     // State to control bottom padding
     const [bottomPadding, setBottomPadding] = useState(0);
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     // Clean up on unmount
     useEffect(() => {
         return () => {
             isMounted.current = false;
+        };
+    }, []);
+
+    // Add keyboard listeners to handle keyboard appearance and dismissal
+    useEffect(() => {
+        const keyboardWillShowListener = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+            (event) => {
+                if (isMounted.current) {
+                    const height = event.endCoordinates.height;
+                    setKeyboardHeight(height);
+                    // Ensure bottom padding accommodates keyboard
+                    setBottomPadding(Platform.OS === 'ios' ? 10 : 16);
+                }
+            }
+        );
+
+        const keyboardWillHideListener = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+            () => {
+                if (isMounted.current) {
+                    setKeyboardHeight(0);
+                    setBottomPadding(Platform.OS === 'ios' ? 30 : 16);
+                }
+            }
+        );
+
+        // Set initial padding
+        setBottomPadding(Platform.OS === 'ios' ? 30 : 16);
+
+        return () => {
+            keyboardWillShowListener.remove();
+            keyboardWillHideListener.remove();
         };
     }, []);
 
@@ -231,7 +265,7 @@ const AIChatScreen = () => {
             });
     }, [inputText]);
 
-    // Auto-scroll to the latest message
+    // Auto-scroll to the latest message, enhanced to handle keyboard appearance
     useEffect(() => {
         if (messages.length > 0 && isMounted.current) {
             const scrollTimer = setTimeout(() => {
@@ -240,7 +274,7 @@ const AIChatScreen = () => {
 
             return () => clearTimeout(scrollTimer);
         }
-    }, [messages]);
+    }, [messages, keyboardHeight]); // Add keyboardHeight dependency to scroll when keyboard appears
 
     // Navigate back safely
     const navigateBack = useCallback(() => {
@@ -595,152 +629,175 @@ Can you provide me with styling advice for this item? How sustainable is it? Wou
                 </View>
 
                 {/* Chat Area */}
-                <View style={styles.chatContainer}>
-                    <FlatList
-                        ref={flatListRef}
-                        data={messages}
-                        renderItem={renderItem}
-                        keyExtractor={item => item.id}
-                        contentContainerStyle={styles.messagesList}
-                        showsVerticalScrollIndicator={false}
-                        removeClippedSubviews={false}
-                        maxToRenderPerBatch={10}
-                        windowSize={10}
-                    />
-
-                    {/* Typing Indicator */}
-                    {isTyping && (
-                        <View style={styles.typingContainer}>
-                            <View style={styles.typingBubble}>
-                                <View style={styles.typingAvatarContainer}>
-                                    <Image
-                                        source={require('../../../assets/icon.png')}
-                                        style={styles.typingAvatar}
-                                    />
-                                </View>
-                                <Animated.View style={[styles.typingDot, { opacity: dotOpacities[0] }]} />
-                                <Animated.View style={[styles.typingDot, { opacity: dotOpacities[1] }]} />
-                                <Animated.View style={[styles.typingDot, { opacity: dotOpacities[2] }]} />
-                            </View>
-                        </View>
-                    )}
-                </View>
-
-                {/* Quick Suggestions */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.suggestionsContainer}
-                    style={styles.suggestionsScrollView}
-                >
-                    {[
-                        'Sustainable fabrics',
-                        'Outfit ideas',
-                        'Eco-friendly brands',
-                        'Capsule wardrobe',
-                        'Ethical fashion',
-                        'Thrift tips',
-                    ].map((suggestion, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            style={styles.suggestionPill}
-                            onPress={() => setInputText(suggestion)}
-                        >
-                            <Text style={styles.suggestionText}>{suggestion}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-
-                {/* Input Area */}
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
-                    style={[
-                        styles.inputArea,
-                        { paddingBottom: bottomPadding }
-                    ]}
+                    style={{ flex: 1 }}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
                 >
-                    {/* Chat Tools */}
-                    <View style={styles.chatToolsContainer}>
-                        <TouchableOpacity
-                            style={styles.chatToolButton}
-                            onPress={openSavedItemsModal}
-                            hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-                        >
-                            <LinearGradient
-                                colors={['#a2d2c5', TEAL_MEDIUM]}
-                                style={styles.chatToolButtonGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <Ionicons name="heart" size={18} color={WHITE} />
-                            </LinearGradient>
-                            <Text style={styles.chatToolText}>Items</Text>
-                        </TouchableOpacity>
+                    <View style={styles.chatContainer}>
+                        <FlatList
+                            ref={flatListRef}
+                            data={messages}
+                            renderItem={renderItem}
+                            keyExtractor={item => item.id}
+                            contentContainerStyle={[
+                                styles.messagesList,
+                                { paddingBottom: keyboardHeight > 0 ? 20 : 80 } // Add extra padding when keyboard is hidden
+                            ]}
+                            showsVerticalScrollIndicator={false}
+                            removeClippedSubviews={false}
+                            maxToRenderPerBatch={10}
+                            windowSize={10}
+                            onContentSizeChange={() => {
+                                flatListRef.current?.scrollToEnd({ animated: true });
+                            }}
+                            onLayout={() => {
+                                flatListRef.current?.scrollToEnd({ animated: false });
+                            }}
+                        />
 
-                        <TouchableOpacity style={styles.chatToolButton}>
-                            <LinearGradient
-                                colors={['#9bc7d4', '#3c8797']}
-                                style={styles.chatToolButtonGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <Ionicons name="camera" size={18} color={WHITE} />
-                            </LinearGradient>
-                            <Text style={styles.chatToolText}>Camera</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.chatToolButton}>
-                            <LinearGradient
-                                colors={['#93c2bc', '#42827a']}
-                                style={styles.chatToolButtonGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <MaterialCommunityIcons name="palette-swatch" size={18} color={WHITE} />
-                            </LinearGradient>
-                            <Text style={styles.chatToolText}>Style</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.chatToolButton}>
-                            <LinearGradient
-                                colors={['#8ab5c7', '#317996']}
-                                style={styles.chatToolButtonGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <Ionicons name="leaf" size={18} color={WHITE} />
-                            </LinearGradient>
-                            <Text style={styles.chatToolText}>Eco</Text>
-                        </TouchableOpacity>
+                        {/* Typing Indicator */}
+                        {isTyping && (
+                            <View style={styles.typingContainer}>
+                                <View style={styles.typingBubble}>
+                                    <View style={styles.typingAvatarContainer}>
+                                        <Image
+                                            source={require('../../../assets/icon.png')}
+                                            style={styles.typingAvatar}
+                                        />
+                                    </View>
+                                    <Animated.View style={[styles.typingDot, { opacity: dotOpacities[0] }]} />
+                                    <Animated.View style={[styles.typingDot, { opacity: dotOpacities[1] }]} />
+                                    <Animated.View style={[styles.typingDot, { opacity: dotOpacities[2] }]} />
+                                </View>
+                            </View>
+                        )}
                     </View>
 
-                    <View style={styles.inputContainer}>
-                        <TextInput
-                            style={styles.textInput}
-                            placeholder="Ask Echo for fashion advice..."
-                            placeholderTextColor="rgba(0,0,0,0.4)"
-                            value={inputText}
-                            onChangeText={setInputText}
-                            multiline
-                            maxLength={500}
-                        />
-                        <TouchableOpacity
-                            style={[
-                                styles.sendButton,
-                                { opacity: inputText.trim() === '' ? 0.6 : 1 }
-                            ]}
-                            onPress={handleSend}
-                            disabled={inputText.trim() === ''}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    {/* Quick Suggestions - Only show when keyboard is not visible
+                    {keyboardHeight === 0 && (
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.suggestionsContainer}
+                            style={styles.suggestionsScrollView}
                         >
-                            <LinearGradient
-                                colors={[TEAL_MEDIUM, TEAL_DARK]}
-                                style={styles.sendButtonGradient}
+                            {[
+                                'Sustainable fabrics',
+                                'Outfit ideas',
+                                'Eco-friendly brands',
+                                'Capsule wardrobe',
+                                'Ethical fashion',
+                                'Thrift tips',
+                            ].map((suggestion, index) => (
+                                <TouchableOpacity
+                                    key={index}
+                                    style={styles.suggestionPill}
+                                    onPress={() => setInputText(suggestion)}
+                                >
+                                    <Text style={styles.suggestionText}>{suggestion}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    )} */}
+
+                    {/* Input Area */}
+                    <View
+                        style={[
+                            styles.inputArea,
+                            { paddingBottom: Math.max(bottomPadding, Platform.OS === 'ios' ? 10 : 0) }
+                        ]}
+                    >
+                        {/* Chat Tools - Hide when keyboard is visible */}
+                        {keyboardHeight === 0 && (
+                            <View style={styles.chatToolsContainer}>
+                                <TouchableOpacity
+                                    style={styles.chatToolButton}
+                                    onPress={openSavedItemsModal}
+                                    hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+                                >
+                                    <LinearGradient
+                                        colors={['#a2d2c5', TEAL_MEDIUM]}
+                                        style={styles.chatToolButtonGradient}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Ionicons name="heart" size={18} color={WHITE} />
+                                    </LinearGradient>
+                                    <Text style={styles.chatToolText}>Items</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.chatToolButton}>
+                                    <LinearGradient
+                                        colors={['#9bc7d4', '#3c8797']}
+                                        style={styles.chatToolButtonGradient}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Ionicons name="camera" size={18} color={WHITE} />
+                                    </LinearGradient>
+                                    <Text style={styles.chatToolText}>Camera</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.chatToolButton}>
+                                    <LinearGradient
+                                        colors={['#93c2bc', '#42827a']}
+                                        style={styles.chatToolButtonGradient}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <MaterialCommunityIcons name="palette-swatch" size={18} color={WHITE} />
+                                    </LinearGradient>
+                                    <Text style={styles.chatToolText}>Style</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.chatToolButton}>
+                                    <LinearGradient
+                                        colors={['#8ab5c7', '#317996']}
+                                        style={styles.chatToolButtonGradient}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Ionicons name="leaf" size={18} color={WHITE} />
+                                    </LinearGradient>
+                                    <Text style={styles.chatToolText}>Eco</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
+                        <View style={styles.inputContainer}>
+                            <TextInput
+                                style={styles.textInput}
+                                placeholder="Ask Echo for fashion advice..."
+                                placeholderTextColor="rgba(0,0,0,0.4)"
+                                value={inputText}
+                                onChangeText={setInputText}
+                                multiline
+                                maxLength={500}
+                                onFocus={() => {
+                                    // Scroll to end when focusing on input
+                                    setTimeout(() => {
+                                        flatListRef.current?.scrollToEnd({ animated: true });
+                                    }, 100);
+                                }}
+                            />
+                            <TouchableOpacity
+                                style={[
+                                    styles.sendButton,
+                                    { opacity: inputText.trim() === '' ? 0.6 : 1 }
+                                ]}
+                                onPress={handleSend}
+                                disabled={inputText.trim() === ''}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             >
-                                <Ionicons name="send" size={20} color={WHITE} />
-                            </LinearGradient>
-                        </TouchableOpacity>
+                                <LinearGradient
+                                    colors={[TEAL_MEDIUM, TEAL_DARK]}
+                                    style={styles.sendButtonGradient}
+                                >
+                                    <Ionicons name="send" size={20} color={WHITE} />
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </KeyboardAvoidingView>
 
@@ -1001,6 +1058,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 8,
         elevation: 5,
+        marginBottom: -32,
     },
     chatToolsContainer: {
         flexDirection: 'row',
@@ -1037,7 +1095,7 @@ const styles = StyleSheet.create({
         alignItems: 'flex-end',
         marginHorizontal: 16,
         marginTop: 10,
-        marginBottom: 16,
+        position: 'relative',
     },
     textInput: {
         flex: 1,
@@ -1059,6 +1117,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         right: 6,
         bottom: 6,
+        zIndex: 2,
     },
     sendButtonGradient: {
         width: 36,
@@ -1068,11 +1127,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     suggestionsScrollView: {
-        position: 'absolute',
-        bottom: 200,
-        left: 0,
-        right: 0,
+        position: 'relative',
+        backgroundColor: 'transparent',
         zIndex: 5,
+        marginBottom: 8,
     },
     suggestionsContainer: {
         flexDirection: 'row',
@@ -1095,6 +1153,7 @@ const styles = StyleSheet.create({
         textShadowColor: 'rgba(0, 0, 0, 0.2)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 2,
+        marginBottom: 16,
     },
     modalOverlay: {
         flex: 1,
